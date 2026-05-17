@@ -119,7 +119,7 @@ def _investment_insights(profile: dict) -> list[dict]:
             ))
         else:
             rebalance = suggest_rebalance()
-            if rebalance and not any("suggestion" in r for r in rebalance):
+            if rebalance:
                 total_drift = sum(abs(r.get("diff_pct", 0)) for r in rebalance)
                 if total_drift > 10:
                     insights.append(_insight(

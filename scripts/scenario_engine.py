@@ -38,10 +38,21 @@ def compare_salary_packages(
         benefits = float(pkg.get("benefits_value", 0))
         bav = float(pkg.get("bav_contribution", 0))
 
-        # Simple net estimation (locale-independent)
-        estimated_tax_rate = 0.25  # Default estimate
-        estimated_social_rate = 0.20
-        net = gross * (1 - estimated_tax_rate - estimated_social_rate) + benefits - bav * 0.5
+        try:
+            from tax_engine import calculate_tax
+            _pkg_profile = deepcopy(profile or get_profile() or {})
+            _pkg_profile.setdefault("employment", {})["annual_gross"] = gross
+            _tax = calculate_tax(_pkg_profile, datetime.now().year)
+            if _tax and not _tax.get("error"):
+                _income_tax = _tax.get("income_tax", 0)
+                _social = _tax.get("total_social", _tax.get("social_contributions_total", 0))
+                net = gross - _income_tax - _social + benefits - bav * 0.5
+                _tax_note = f"locale: {_pkg_profile.get('meta', {}).get('locale', 'unknown')}"
+            else:
+                raise ValueError("no result")
+        except Exception:
+            net = gross * (1 - 0.25 - 0.20) + benefits - bav * 0.5
+            _tax_note = "estimated (25% income tax + 20% social — use tax module for precision)"
 
         projections = []
         for yr in range(projection_years):
@@ -59,6 +70,7 @@ def compare_salary_packages(
             "estimated_monthly_net": round(net / 12, 2),
             "projections": projections,
             "multi_year_net_total": round(sum(p["estimated_annual_net"] for p in projections), 2),
+            "tax_note": _tax_note,
         })
 
     best = max(evaluations, key=lambda e: e["estimated_annual_net"])
@@ -67,7 +79,7 @@ def compare_salary_packages(
         "packages": evaluations,
         "best_option": best,
         "projection_years": projection_years,
-        "note": "Tax estimates are approximate. Use the tax module for precise locale-specific calculations.",
+        "note": "Net figures use locale-specific tax rules where available. Use the tax module for a precise breakdown.",
     }
 
 
@@ -302,4 +314,102 @@ def compare_rent_vs_buy(
             "home_appreciation": f"{home_appreciation*100:.0f}%/year",
             "investment_return": f"{investment_return*100:.0f}%/year",
         },
+    }
+
+
+# ── Freelance vs Employment ──────────────────────────────────────────────────
+
+def compare_freelance_vs_employment(
+    employed_gross: float,
+    freelance_daily_rate: float,
+    billable_days_per_year: int = 220,
+    freelance_monthly_expenses: float = 500.0,
+    profile: Optional[dict] = None,
+) -> dict:
+    """Compare staying employed vs going freelance.
+
+    Calculates net income for both scenarios using locale-specific tax rules
+    where available, falling back to conservative estimates. Identifies the
+    break-even daily rate and billable-days threshold.
+
+    Args:
+        employed_gross: Current annual gross salary.
+        freelance_daily_rate: Target daily rate as a freelancer.
+        billable_days_per_year: Expected billable days (default 220, ~85% of working days).
+        freelance_monthly_expenses: Monthly business overhead (software, desk, accountant).
+        profile: Finance profile dict. Loaded automatically if not passed.
+    """
+    profile = profile or get_profile() or {}
+
+    def _net_for_gross(annual_gross: float, employment_type: str = "employed") -> tuple[float, str]:
+        """Return (net, note) using tax_engine or flat estimate."""
+        try:
+            from tax_engine import calculate_tax
+            p = deepcopy(profile)
+            p.setdefault("employment", {})["annual_gross"] = annual_gross
+            p["employment"]["type"] = employment_type
+            result = calculate_tax(p, datetime.now().year)
+            if result and not result.get("error"):
+                income_tax = result.get("income_tax", 0)
+                social = result.get("total_social", result.get("social_contributions_total", 0))
+                return annual_gross - income_tax - social, "locale-specific tax rules"
+        except Exception:
+            pass
+        # Fallback: employed ~45% combined, freelance ~40% (no employer social top-up)
+        rate = 0.45 if employment_type == "employed" else 0.40
+        return annual_gross * (1 - rate), "estimated (~40–45% combined tax + social)"
+
+    # Employment scenario
+    employed_net, emp_note = _net_for_gross(employed_gross, "employed")
+
+    # Freelance scenario
+    freelance_gross_revenue = freelance_daily_rate * billable_days_per_year
+    annual_expenses = freelance_monthly_expenses * 12
+    freelance_taxable = max(0.0, freelance_gross_revenue - annual_expenses)
+    freelance_net_before_expenses, fl_note = _net_for_gross(freelance_taxable, "freelance")
+    # Net after deducting expenses (expenses already reduce taxable income, so net is from taxable)
+    freelance_net = freelance_net_before_expenses
+
+    # Break-even: minimum daily rate to match employed net
+    # Solve: (rate * days - annual_expenses) * (1 - effective_rate) = employed_net
+    effective_rate = 0.40  # conservative freelance estimate
+    breakeven_rate = (employed_net / (1 - effective_rate) + annual_expenses) / billable_days_per_year
+    breakeven_days = max(1, int(
+        (employed_net / (1 - effective_rate) + annual_expenses) / freelance_daily_rate
+    ))
+
+    net_advantage = freelance_net - employed_net
+    advantage_monthly = net_advantage / 12
+
+    return {
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "employment": {
+            "annual_gross": employed_gross,
+            "estimated_annual_net": round(employed_net, 2),
+            "estimated_monthly_net": round(employed_net / 12, 2),
+            "tax_note": emp_note,
+        },
+        "freelance": {
+            "daily_rate": freelance_daily_rate,
+            "billable_days": billable_days_per_year,
+            "annual_gross_revenue": round(freelance_gross_revenue, 2),
+            "annual_business_expenses": round(annual_expenses, 2),
+            "taxable_income": round(freelance_taxable, 2),
+            "estimated_annual_net": round(freelance_net, 2),
+            "estimated_monthly_net": round(freelance_net / 12, 2),
+            "tax_note": fl_note,
+        },
+        "break_even": {
+            "minimum_daily_rate": round(breakeven_rate, 2),
+            "minimum_billable_days": breakeven_days,
+            "current_rate_vs_breakeven": round(freelance_daily_rate - breakeven_rate, 2),
+        },
+        "net_advantage_annual": round(net_advantage, 2),
+        "net_advantage_monthly": round(advantage_monthly, 2),
+        "recommendation": "freelance" if net_advantage > 0 else "employment",
+        "caveats": [
+            "Freelance figures exclude employer-paid benefits (health insurance top-up, pension, paid leave).",
+            "Income stability risk not modelled — freelance income may vary month to month.",
+            "Use the tax module for a precise locale-specific net calculation.",
+        ],
     }

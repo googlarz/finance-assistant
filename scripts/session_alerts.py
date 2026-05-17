@@ -173,14 +173,12 @@ def _goal_alerts(today: date) -> list[dict]:
 
         days_until = (deadline - today).days
         if days_until < 0:
-            alerts.append({
-                "type": "missed_deadline",
-                "domain": "goals",
-                "priority": "high",
-                "title": f"Goal deadline passed: {goal.get('name', 'Unnamed goal')}",
-                "message": f"Your '{goal.get('name', 'goal')}' deadline was {abs(days_until)} day(s) ago. Consider updating the target date or reviewing your contribution.",
-                "action": f"Review goal: {goal.get('name', '')}",
-            })
+            alerts.append(_alert(
+                "warning", "goals",
+                f"Goal deadline passed: {goal.get('name', 'Unnamed goal')}",
+                f"Deadline was {abs(days_until)} day(s) ago — consider updating the target date.",
+                f"Review your contribution plan for '{goal.get('name', '')}'.",
+            ))
             continue
         if days_until > 45:
             continue
@@ -218,6 +216,14 @@ def _goal_alerts(today: date) -> list[dict]:
 
 def _tax_alerts(today: date, locale: str = "de") -> list[dict]:
     alerts = []
+    _FILING_ACTIONS = {
+        "de": "File via ELSTER or a Steuerberater. Extension (Fristverlängerung) possible.",
+        "uk": "File via HMRC Self Assessment online. Late filing penalty applies after 3 months.",
+        "fr": "Declare via impots.gouv.fr. Extension may be available for online filers.",
+        "nl": "File via Mijn Belastingdienst portal at belastingdienst.nl.",
+        "pl": "File via e-Deklaracje or Twój e-PIT at podatki.gov.pl.",
+    }
+    filing_action = _FILING_ACTIONS.get(locale, "File your tax return before the deadline.")
     try:
         import sys, os
         sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
@@ -239,7 +245,7 @@ def _tax_alerts(today: date, locale: str = "de") -> list[dict]:
                 urgency = "critical" if days_until <= 7 else "warning" if days_until <= 21 else "info"
                 alerts.append(_alert(urgency, "tax", f"Tax deadline: {label}",
                     f"Due {deadline.strftime('%d %b %Y')} ({days_until} days)",
-                    "File via ELSTER or a Steuerberater. Extension (Fristverlängerung) possible."))
+                    filing_action))
     except Exception:
         pass
     return alerts
@@ -266,8 +272,10 @@ def _fire_alert(profile: dict, today: date) -> list[dict]:
         portfolio_path = get_finance_dir() / "investments" / "portfolio.json"
         portfolio = load_json(portfolio_path, default={})
         holdings = portfolio.get("holdings", [])
+        using_cost_basis = any(h.get("current_value") is None for h in holdings)
         total_invested = sum(
-            h.get("current_value", h.get("quantity", 0) * h.get("purchase_price", 0))
+            h.get("current_value") if h.get("current_value") is not None
+            else h.get("quantity", 0) * h.get("purchase_price", 0)
             for h in holdings
         )
     except Exception:
@@ -291,7 +299,7 @@ def _fire_alert(profile: dict, today: date) -> list[dict]:
         "info", "investments",
         f"FIRE progress: {pct:.1f}%",
         f"[{bar}] €{total_invested:,.0f} / €{fire_target:,.0f}",
-        "Keep investing consistently. Review allocation if needed.",
+        ("Portfolio value estimated from cost basis — update current prices for accuracy. " if using_cost_basis else "") + "Keep investing consistently. Review allocation if needed.",
     )]
 
 
@@ -310,8 +318,10 @@ def _threshold_alerts(profile: dict) -> list[dict]:
         nw_data = calculate_net_worth(profile) or {}
         portfolio_data = get_portfolio() or {}
         holdings = portfolio_data.get("holdings", [])
+        using_cost_basis = any(h.get("current_value") is None for h in holdings)
         portfolio_value = sum(
-            h.get("current_value", h.get("quantity", 0) * h.get("purchase_price", 0))
+            h.get("current_value") if h.get("current_value") is not None
+            else h.get("quantity", 0) * h.get("purchase_price", 0)
             for h in holdings
         )
 
@@ -459,15 +469,11 @@ def format_alerts(alerts: list[dict]) -> str:
     if not alerts:
         return ""
 
-    icons = {"critical": "[!]", "warning": "[~]", "info": "[i]", "missed_deadline": "⏰"}
+    icons = {"critical": "[!]", "warning": "[~]", "info": "[i]"}
     lines = ["**Session alerts:**"]
     for a in alerts:
-        if a.get("type") == "missed_deadline":
-            icon = "⏰"
-            detail = a.get("message", "")
-        else:
-            icon = icons.get(a["urgency"], "•")
-            detail = a.get("detail", "")
+        icon = icons.get(a.get("urgency", "info"), "•")
+        detail = a.get("detail", "")
         lines.append(f"{icon} **{a['title']}** — {detail}")
         if a.get("action"):
             lines.append(f"   → {a['action']}")

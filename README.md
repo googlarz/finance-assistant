@@ -31,7 +31,7 @@ python3 skill.py --dashboard  # generate from your real data → ~/.finance/dash
 
 ## What It Does
 
-Finance Assistant covers the full personal finance lifecycle across 12 operating modes:
+Finance Assistant covers the full personal finance lifecycle across 18 operating modes:
 
 | Mode | What you say | What you get |
 |------|-------------|-------------|
@@ -47,6 +47,12 @@ Finance Assistant covers the full personal finance lifecycle across 12 operating
 | **Scenario Lab** | "should I rent or buy?" | Before/after comparison with multi-year projection |
 | **Monte Carlo** | "what's my FIRE confidence?" | 10,000-simulation distribution with p10/p50/p90 outcomes |
 | **Specialist Handoff** | complex case | Structured brief for a Steuerberater or financial adviser |
+| **Shared Household** | "split expenses with my partner" | Shared budget tracking, settlement ledger |
+| **Month Comparison** | "how was March vs February?" | Month-over-month delta by category with trend arrows |
+| **Scenario Memory** | "save this scenario" | Named scenario snapshots you can revisit and compare |
+| **Session Recall** | "what did we discuss last week?" | Session-indexed memory of past financial decisions |
+| **Milestone Alerts** | "alert me when net worth hits €100k" | User-configured threshold triggers surfaced at session start |
+| **Freelance Analyser** | "should I go freelance?" | Break-even rate, net income comparison, billable-days threshold |
 
 ### Proactive Session Alerts
 

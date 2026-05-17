@@ -96,16 +96,18 @@ def extract_date(text: str) -> str:
             days_back = 7  # "monday" when today is monday → last monday
         return (today - timedelta(days=days_back)).isoformat()
     # Numeric date e.g. 15/04 or 15.04.2025
-    for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%d/%m/%y",
-                "%d/%m", "%d.%m", "%d-%m"):
-        try:
-            parsed = date(*[int(x) for x in re.split(r"[./-]", token)][::-1])
-            # If no year provided, assume current year
-            if len(re.split(r"[./-]", token)) == 2:
-                parsed = parsed.replace(year=today.year)
-            return parsed.isoformat()
-        except Exception:
-            continue
+    parts_list = re.split(r"[./-]", token)
+    try:
+        if len(parts_list) == 2:
+            day, month = int(parts_list[0]), int(parts_list[1])
+            return date(today.year, month, day).isoformat()
+        elif len(parts_list) == 3:
+            day, month, yr = int(parts_list[0]), int(parts_list[1]), int(parts_list[2])
+            if yr < 100:
+                yr += 2000
+            return date(yr, month, day).isoformat()
+    except Exception:
+        pass
     return today.isoformat()
 _CATEGORY_RE = re.compile(
     r"\b(groceries?|food|supermarket|restaurant|cafe|coffee|transport|"
@@ -140,54 +142,121 @@ _MERCHANT_RE = re.compile(
     r"\b(?:at|from|in|@)\s+([A-Z][a-zA-Z0-9&'\-\s]{1,30})",
     re.IGNORECASE,
 )
+_RATE_RE = re.compile(r"(\d+(?:\.\d+)?)\s*%")
+_TICKER_RE = re.compile(r"\b([A-Z]{2,5})\b")
 
 def extract_merchant(text: str) -> str | None:
     m = _MERCHANT_RE.search(text)
     return m.group(1).strip() if m else None
 
 
-# ── Detection (no saving — Claude gathers missing details first) ───────────────
+# ── Detection (no saving — Claude confirms details then saves) ────────────────
+
+_DEBT_KEYWORDS = {
+    "mortgage": "mortgage", "credit card": "credit card",
+    "student loan": "student loan", "car loan": "car loan",
+    "overdraft": "overdraft", "loan": "loan",
+}
+_ACCOUNT_KEYWORDS = {
+    "savings": "savings", "checking": "checking",
+    "current account": "checking", "isa": "isa",
+    "pension": "pension", "401k": "retirement", "portfolio": "investment",
+}
+_INV_KEYWORDS = [
+    (r"etf", "ETF"), (r"stocks?", "stock"), (r"bonds?", "bond"),
+    (r"crypto", "crypto"), (r"btc", "Bitcoin"), (r"eth", "Ethereum"), (r"fund", "fund"),
+]
+
 
 def detect(prompt: str, types: list[str]) -> list[str]:
     lines = []
+    prompt_lower = prompt.lower()
 
     if "transaction" in types:
         amount, currency = extract_amount(prompt)
-        if amount is None:
-            return lines
-        category = extract_category(prompt)
-        txn_date = extract_date(prompt)
-        merchant = extract_merchant(prompt)
-        sign_word = _TRANSACTION.search(prompt).group(1).lower()
-        sign = -1 if sign_word in (
-            "spent", "paid", "bought", "purchased", "charged", "cost",
-            "fee", "expense", "bill", "invoice"
-        ) else 1
+        if amount is not None:
+            category = extract_category(prompt)
+            txn_date = extract_date(prompt)
+            merchant = extract_merchant(prompt)
+            sign_word = _TRANSACTION.search(prompt).group(1).lower()
+            sign = -1 if sign_word in (
+                "spent", "paid", "bought", "purchased", "charged", "cost",
+                "fee", "expense", "bill", "invoice"
+            ) else 1
 
-        known_parts = [
-            f"amount={sign * amount:+.2f} {currency}",
-            f"date={txn_date}",
-            f"category={category}",
-        ]
-        if merchant:
-            known_parts.append(f"merchant={merchant}")
-        known = ", ".join(known_parts)
+            known_parts = [
+                f"amount={sign * amount:+.2f} {currency}",
+                f"date={txn_date}",
+                f"category={category}",
+            ]
+            if merchant:
+                known_parts.append(f"merchant={merchant}")
 
-        missing = []
-        if not merchant:
-            missing.append("store/merchant name")
-        if category == "other":
-            missing.append("category (e.g. groceries, transport, restaurant)")
-        if abs(amount) >= 20:
-            missing.append("receipt photo (optional but useful)")
+            missing = []
+            if not merchant:
+                missing.append("store/merchant name")
+            if category == "other":
+                missing.append("category (e.g. groceries, transport, restaurant)")
+            if abs(amount) >= 20:
+                missing.append("receipt photo (optional but useful)")
 
-        ask_for = ", ".join(missing) if missing else "confirmation to save"
+            lines.append(
+                f"TRANSACTION DETECTED — extracted: {', '.join(known_parts)}. "
+                f"Ask the user for: {', '.join(missing) if missing else 'confirmation to save'}. "
+                f"Once you have all details, call add_transaction() to save."
+            )
 
-        lines.append(
-            f"TRANSACTION DETECTED — extracted: {known}. "
-            f"Ask the user for: {ask_for}. "
-            f"Once you have all details, call add_transaction() to save."
-        )
+    if "balance" in types and "transaction" not in types:
+        amount, currency = extract_amount(prompt)
+        if amount is not None:
+            account_type = next(
+                (label for kw, label in _ACCOUNT_KEYWORDS.items() if kw in prompt_lower),
+                "account"
+            )
+            lines.append(
+                f"BALANCE DETECTED — extracted: {account_type} balance={amount:.2f} {currency}. "
+                f"Ask user to confirm account name if unclear, then call "
+                f"update_account_balance() to save."
+            )
+
+    if "debt" in types and "transaction" not in types:
+        amount, currency = extract_amount(prompt)
+        if amount is not None:
+            debt_type = next(
+                (label for kw, label in _DEBT_KEYWORDS.items() if kw in prompt_lower),
+                "debt"
+            )
+            rate_m = _RATE_RE.search(prompt)
+            rate = float(rate_m.group(1)) if rate_m else None
+            known = f"type={debt_type}, balance={amount:.2f} {currency}"
+            if rate:
+                known += f", rate={rate}%"
+            missing = ([] if rate else ["interest rate"]) + ["monthly payment (optional)"]
+            lines.append(
+                f"DEBT DETECTED — extracted: {known}. "
+                f"Ask user for: {', '.join(missing)}. "
+                f"Then call add_debt() to save."
+            )
+
+    if "investment" in types and "transaction" not in types:
+        amount, currency = extract_amount(prompt)
+        if amount is not None:
+            inv_type = next(
+                (label for pattern, label in _INV_KEYWORDS
+                 if re.search(r"\b" + pattern + r"\b", prompt, re.IGNORECASE)),
+                "investment"
+            )
+            ticker_m = _TICKER_RE.search(prompt)
+            ticker = ticker_m.group(1) if ticker_m else None
+            known = f"type={inv_type}, amount={amount:.2f} {currency}"
+            if ticker:
+                known += f", ticker={ticker}"
+            missing = ([] if ticker else ["ticker/fund name"]) + ["number of units/shares"]
+            lines.append(
+                f"INVESTMENT DETECTED — extracted: {known}. "
+                f"Ask user for: {', '.join(missing)}. "
+                f"Then call add_holding() to save."
+            )
 
     return lines
 
