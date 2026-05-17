@@ -78,7 +78,7 @@ pip install -r requirements.txt
 ### Verify your install
 
 ```bash
-python3 skill.py --version    # finance-assistant 3.1.0
+python3 skill.py --version    # finance-assistant 3.3.0
 python3 skill.py --doctor     # runs health checks on your setup
 ```
 
@@ -100,6 +100,18 @@ Add as a skill in `~/.claude/settings.json`:
 ```
 
 Then start a session: `What's my financial health?`
+
+---
+
+### Use on claude.ai (no installation)
+
+If you use Claude on the web or mobile and don't want to install anything, use the Projects template:
+
+1. Create a new **Project** on [claude.ai](https://claude.ai)
+2. Paste the contents of [`projects-template/PROJECT_INSTRUCTIONS.md`](projects-template/PROJECT_INSTRUCTIONS.md) into the Project instructions field
+3. Start chatting — budgeting, debt advice, savings goals, net worth tracking, and tax questions all work conversationally
+
+This is a lite version: no CSV import, bank sync, Monte Carlo, or live prices. For those, use the full Claude Code skill above.
 
 ---
 
@@ -136,7 +148,7 @@ Locales are maintained in a separate git submodule at **https://github.com/googl
 | Locale | Coverage |
 |--------|---------|
 | **`de`** — Germany | Income tax, Soli, GKV/PKV social contributions, deductions, filing deadlines 2024–2026 |
-| **`uk`** — United Kingdom | Income tax bands, NI Class 1, personal allowance taper (£100k–£125,140) 2024–2026 |
+| **`uk`** — United Kingdom | Income tax bands, NI Class 1, personal allowance taper (£100k–£125,140), insurance guidance (income protection, life, critical illness) 2024–2026 |
 | **`fr`** — France | Quotient familial, décote, IR tranches, CSG/CRDS with assiette réduite (Art. L136-2 CSS) |
 | **`nl`** — Netherlands | Box 1/2/3, heffingskorting, arbeidskorting (Box 3 Kerstarrest note included) |
 | **`pl`** — Poland | Polski Ład reform: 12%/32%, 30k PLN free amount, składka zdrowotna |
@@ -157,7 +169,7 @@ New locales can be contributed independently to the locales repository without t
 │                │                                                │
 │                ▼                                                │
 │         ┌──────────────────────────────────────────┐           │
-│         │              12 Modes                    │           │
+│         │              18 Modes                    │           │
 │         │  Budget · Transactions · Goals           │           │
 │         │  Investments · Debt · Tax · Insurance    │           │
 │         │  Net Worth · Import · Monte Carlo        │           │
@@ -444,6 +456,7 @@ The privacy statement is shown once:
 | Module | Purpose |
 |--------|---------|
 | `investment_tracker.py` | Portfolio CRUD, allocation, FIRE number, monthly snapshots |
+| `price_sync.py` | Fetch live ETF/stock prices from Yahoo Finance (no API key), update `current_value`, 6h TTL |
 | `investment_returns.py` | TWR, XIRR (Newton's method), per-holding performance |
 | `debt_optimizer.py` | Avalanche/snowball simulation, mortgage optimization, debt-free date |
 | `insurance_analyzer.py` | Policy tracking, coverage gaps, renewal alerts |
