@@ -129,7 +129,7 @@ def main() -> str:
 
 if __name__ == "__main__":
     if "--version" in sys.argv:
-        print("finance-assistant 3.1.2")
+        print(f"finance-assistant {__version__}")
         sys.exit(0)
 
     if "--doctor" in sys.argv:
