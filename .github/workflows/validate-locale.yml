@@ -1,0 +1,49 @@
+name: Validate Locale Contracts
+
+# Runs when locale code changes — on PR or push to main.
+# Ensures every locale's calculate_*() function returns the required
+# output keys at the required types and precision.
+#
+# To add a new locale: add an entry to scripts/validate_locale.py
+# and open a PR — this workflow will confirm it meets the contract.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "locales/**"
+      - "scripts/validate_locale.py"
+  pull_request:
+    branches: [main]
+    paths:
+      - "locales/**"
+      - "scripts/validate_locale.py"
+
+jobs:
+  validate-locales:
+    name: Locale contract validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run locale validator
+        run: PYTHONPATH=. python3 scripts/validate_locale.py
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Locale Validation" >> $GITHUB_STEP_SUMMARY
+          echo "Each locale's calculate_*() function was called with a standard test input." >> $GITHUB_STEP_SUMMARY
+          echo "The validator checks: required output keys, value types, numeric ranges, and float precision." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "To add a locale: edit \`scripts/validate_locale.py\` → \`LOCALE_CONTRACTS\`." >> $GITHUB_STEP_SUMMARY
