@@ -67,24 +67,27 @@ Every session start checks five domains automatically:
 
 ## Quick Start
 
-### 1. Clone the skill
+### Use on claude.ai (no installation)
+
+If you use Claude on the web or mobile and don't want to install anything, use the Projects template:
+
+1. Create a new **Project** on [claude.ai](https://claude.ai)
+2. Paste the contents of [`projects-template/PROJECT_INSTRUCTIONS.md`](projects-template/PROJECT_INSTRUCTIONS.md) into the Project instructions field
+3. Start chatting — budgeting, debt advice, savings goals, net worth tracking, and tax questions all work conversationally
+
+This is a lite version: no CSV import, bank sync, Monte Carlo, or live prices. For those, use the full Claude Code skill below.
+
+---
+
+### Install in Claude Code
+
+Clone the repo and add it as a skill:
 
 ```bash
 git clone --recurse-submodules https://github.com/googlarz/finance-assistant.git
 cd finance-assistant
 pip install -r requirements.txt
 ```
-
-### Verify your install
-
-```bash
-python3 skill.py --version    # finance-assistant 3.3.0
-python3 skill.py --doctor     # runs health checks on your setup
-```
-
----
-
-### Install in Claude Code
 
 Add as a skill in `~/.claude/settings.json`:
 
@@ -101,17 +104,12 @@ Add as a skill in `~/.claude/settings.json`:
 
 Then start a session: `What's my financial health?`
 
----
+### Verify your install
 
-### Use on claude.ai (no installation)
-
-If you use Claude on the web or mobile and don't want to install anything, use the Projects template:
-
-1. Create a new **Project** on [claude.ai](https://claude.ai)
-2. Paste the contents of [`projects-template/PROJECT_INSTRUCTIONS.md`](projects-template/PROJECT_INSTRUCTIONS.md) into the Project instructions field
-3. Start chatting — budgeting, debt advice, savings goals, net worth tracking, and tax questions all work conversationally
-
-This is a lite version: no CSV import, bank sync, Monte Carlo, or live prices. For those, use the full Claude Code skill above.
+```bash
+python3 skill.py --version    # finance-assistant 3.3.0
+python3 skill.py --doctor     # runs health checks on your setup
+```
 
 ---
 
