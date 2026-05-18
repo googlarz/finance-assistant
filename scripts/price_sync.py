@@ -122,6 +122,49 @@ def sync_prices(force: bool = False) -> dict:
     }
 
 
+def get_stale_holding_count() -> tuple[int, float]:
+    """Return (stale_count, max_age_hours) for eligible holdings with outdated prices.
+
+    Read-only. Never fetches prices. Safe to call at session start.
+    Returns (0, 0.0) if portfolio is empty, unreadable, or all prices are fresh.
+    """
+    try:
+        portfolio = _load_portfolio()
+    except Exception:
+        return 0, 0.0
+
+    now = datetime.now(tz=timezone.utc)
+    stale_count = 0
+    max_age_hours = 0.0
+
+    for holding in portfolio.get("holdings", []):
+        symbol = holding.get("symbol", "").strip()
+        asset_type = holding.get("type", "other")
+
+        if asset_type in _SKIP_TYPES or not symbol:
+            continue
+
+        fetched_at_str = holding.get("price_fetched_at")
+        if not fetched_at_str:
+            # Never synced — counts as stale
+            stale_count += 1
+            max_age_hours = max(max_age_hours, float("inf"))
+            continue
+
+        try:
+            fetched_at = datetime.fromisoformat(fetched_at_str)
+            if fetched_at.tzinfo is None:
+                fetched_at = fetched_at.replace(tzinfo=timezone.utc)
+            age_seconds = (now - fetched_at).total_seconds()
+            if age_seconds >= _TTL_SECONDS:
+                stale_count += 1
+                max_age_hours = max(max_age_hours, age_seconds / 3600)
+        except ValueError:
+            stale_count += 1
+
+    return stale_count, max_age_hours
+
+
 def format_sync_result(result: dict) -> str:
     """Return a human-readable summary of a sync_prices() result."""
     lines = ["Price Sync Summary"]

@@ -422,6 +422,22 @@ def get_session_alerts(profile: Optional[dict] = None) -> list[dict]:
 
     all_alerts.extend(_data_coach_alerts(profile))
 
+    # Stale portfolio prices nudge
+    try:
+        from price_sync import get_stale_holding_count
+        stale_count, max_age_hours = get_stale_holding_count()
+        if stale_count > 0:
+            age_str = f"{max_age_hours:.0f}h" if max_age_hours < float("inf") else "never synced"
+            all_alerts.append(_alert(
+                "info",
+                "portfolio",
+                f"{stale_count} holding{'s' if stale_count != 1 else ''} with stale prices",
+                f"Last updated: {age_str} ago — prices may not reflect current market values.",
+                "Say 'sync prices' to refresh before running FIRE or net worth calculations.",
+            ))
+    except Exception:
+        pass  # Never crash the session over a price staleness check
+
     # Sort: critical → warning → info, then by domain
     order = {u: i for i, u in enumerate(URGENCY_LEVELS)}
     all_alerts.sort(key=lambda a: (order.get(a["urgency"], 99), a["domain"]))
