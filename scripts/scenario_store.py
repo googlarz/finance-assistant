@@ -234,6 +234,120 @@ def compare_scenario_to_current(name: str, current_profile: dict) -> Optional[di
     }
 
 
+def compare_scenarios(names: list[str]) -> dict:
+    """
+    Load two or more saved scenarios and return a side-by-side comparison dict.
+
+    Returns:
+        {
+          "scenarios": [{"name", "type", "saved_at", "inputs", "result", "profile_snapshot"}, ...],
+          "diff": {key: [val_a, val_b, ...]},  # numeric keys present in any result
+          "missing": [str],                     # names that couldn't be loaded
+        }
+    """
+    loaded = []
+    missing = []
+    for name in names:
+        record = load_scenario(name)
+        if record is None:
+            missing.append(name)
+        else:
+            loaded.append(record)
+
+    if not loaded:
+        return {"scenarios": [], "diff": {}, "missing": missing}
+
+    # Collect all numeric keys present in any result dict
+    all_keys: set[str] = set()
+    for record in loaded:
+        for k, v in record.get("result", {}).items():
+            if isinstance(v, (int, float)):
+                all_keys.add(k)
+
+    diff: dict[str, list] = {
+        key: [record.get("result", {}).get(key) for record in loaded]
+        for key in sorted(all_keys)
+    }
+
+    return {
+        "scenarios": [
+            {
+                "name": r.get("name", ""),
+                "type": r.get("type", ""),
+                "saved_at": r.get("saved_at", ""),
+                "inputs": r.get("inputs", {}),
+                "result": r.get("result", {}),
+                "profile_snapshot": r.get("profile_snapshot", {}),
+            }
+            for r in loaded
+        ],
+        "diff": diff,
+        "missing": missing,
+    }
+
+
+def format_scenario_comparison(names: list[str]) -> str:
+    """Plain-text side-by-side table for two or more saved scenarios."""
+    data = compare_scenarios(names)
+    scenarios = data["scenarios"]
+
+    if not scenarios:
+        missing_str = ", ".join(data["missing"])
+        return f"Could not find scenarios: {missing_str}"
+
+    if len(scenarios) == 1:
+        return format_scenario_list()
+
+    col_width = max(len(s["name"]) for s in scenarios) + 2
+    lines = ["Scenario comparison:"]
+    header = "Metric".ljust(28) + "".join(s["name"].ljust(col_width) for s in scenarios)
+    lines += [header, "-" * len(header)]
+    lines.append("Type".ljust(28) + "".join(s["type"].ljust(col_width) for s in scenarios))
+
+    DISPLAY_KEYS = [
+        ("years_to_fire", "Years to FIRE"),
+        ("fire_number", "FIRE target"),
+        ("monthly_savings_needed", "Monthly savings needed"),
+        ("success_probability", "Success probability"),
+        ("retirement_age", "Retirement age"),
+        ("safe_withdrawal", "Safe withdrawal (yr)"),
+        ("net_worth", "Net worth at retirement"),
+    ]
+    diff = data["diff"]
+    shown: set[str] = set()
+    for key, label in DISPLAY_KEYS:
+        if key not in diff:
+            continue
+        shown.add(key)
+        values = diff[key]
+        row = label.ljust(28)
+        for val in values:
+            if val is None:
+                cell = "—"
+            elif isinstance(val, float):
+                cell = f"{val:,.1f}" if val < 10_000 else f"{val:,.0f}"
+            else:
+                cell = str(val)
+            row += cell.ljust(col_width)
+        lines.append(row)
+
+    extras = [k for k in diff if k not in shown]
+    if extras:
+        lines.append("\nOther metrics:")
+        for key in extras:
+            values = diff[key]
+            row = key.ljust(28) + "".join(
+                (f"{v:,.2f}" if isinstance(v, float) else str(v) if v is not None else "—").ljust(col_width)
+                for v in values
+            )
+            lines.append(row)
+
+    if data["missing"]:
+        lines.append(f"\n(Could not load: {', '.join(data['missing'])})")
+
+    return "\n".join(lines)
+
+
 def format_scenario_list() -> str:
     """Plain-text list of saved scenarios with type, age, one-liner."""
     items = list_scenarios()
