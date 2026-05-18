@@ -1,6 +1,6 @@
 # Finance Assistant
 
-> Personal finance copilot for **Claude Code** and **Claude Cowork** — budgets, savings goals, investments, debt optimization, taxes, insurance, net worth, bank import, scenario modeling, and Monte Carlo projections. Privacy-first: all data stays on your machine, encrypted at rest and backed by SQLite.
+> Personal finance copilot for **Claude Code** and **Claude Cowork** — budgets, savings goals, investments, debt optimization, taxes, insurance, net worth, bank import, scenario modeling, and Monte Carlo projections. Privacy-first: all data stays on your machine in a local SQLite database. Optional export encryption (Fernet AES) — no cloud sync, ever.
 
 <details>
 <summary>Generate this dashboard from your own data</summary>
@@ -184,7 +184,7 @@ New locales can be contributed independently to the locales repository without t
 │                        │                                        │
 │              ┌─────────▼──────────┐                            │
 │              │  SQLite + .finance/ │  local only, never uploaded│
-│              │  profile · budgets  │  encrypted at rest         │
+│              │  profile · budgets  │  optional export encryption│
 │              │  investments · tax  │  chmod 600, git-ignored    │
 │              │  (12-table WAL DB)  │  auto-migrates from JSON   │
 │              └────────────────────┘                            │
