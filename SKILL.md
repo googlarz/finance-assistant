@@ -363,13 +363,14 @@ For budget questions:
 
 Save first, then answer. Tell the user what was saved in one short line (e.g. "Saved: 1 transaction (groceries €50)."), then continue.
 
-When the user provides a CSV, MT940, or OFX file:
+When the user provides a CSV, MT940, OFX, PDF, or image file:
 1. Detect format with `import_router.py`
-2. Parse and show preview (first 5-10 transactions)
-3. Import immediately — do not ask for confirmation unless there are >100 transactions or duplicate risk
-4. Auto-categorize using `transaction_normalizer.py`
-5. Deduplicate against existing transactions
-6. Update account balance and budget actuals
+2. **Preserve the original** — `import_file()` copies it to `~/.finance/originals/YYYY-MM-DD_HH-MM-SS_<filename>` before parsing (default on). Mention this to the user: "Original saved to ~/.finance/originals/". To skip: pass `keep_original=False`.
+3. Parse and show preview (first 5-10 transactions)
+4. Import immediately — do not ask for confirmation unless there are >100 transactions or duplicate risk
+5. Auto-categorize using `transaction_normalizer.py`
+6. Deduplicate against existing transactions
+7. Update account balance and budget actuals
 
 ### Investment Tracker
 

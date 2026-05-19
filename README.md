@@ -436,12 +436,13 @@ The privacy statement is shown once:
 ### Import Flow
 
 1. **Detect format** — header fingerprinting identifies the bank automatically
-2. **Parse** — extract date, amount, payee, description
-3. **Preview** — show first 10 transactions for review
-4. **Confirm** — user approves before any data is written
-5. **Auto-categorize** — keyword + payee rules assign categories
-6. **Deduplicate** — exact-match deduplication against existing transactions
-7. **Update** — account balance and budget actuals refreshed
+2. **Preserve original** — source file is copied to `~/.finance/originals/YYYY-MM-DD_HH-MM-SS_<filename>` before any parsing. You always have the raw file, regardless of what happens next. Pass `keep_original=False` to skip.
+3. **Parse** — extract date, amount, payee, description
+4. **Preview** — show first 10 transactions for review
+5. **Confirm** — user approves before any data is written
+6. **Auto-categorize** — keyword + payee rules assign categories
+7. **Deduplicate** — exact-match deduplication against existing transactions
+8. **Update** — account balance and budget actuals refreshed
 
 ### Auto-Categorization
 

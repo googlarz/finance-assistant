@@ -8,17 +8,38 @@ Supports CSV (bank statements), MT940, and OFX/QFX.
 from __future__ import annotations
 
 import os
+import shutil
 from datetime import datetime
 from typing import Optional
 
 try:
-    from finance_storage import get_import_log_path, load_json, save_json
+    from finance_storage import ensure_subdir, get_import_log_path, load_json, save_json
     from transaction_logger import add_transaction, deduplicate, get_transactions
 except ImportError:
     import sys
     sys.path.insert(0, os.path.dirname(__file__))
-    from finance_storage import get_import_log_path, load_json, save_json
+    from finance_storage import ensure_subdir, get_import_log_path, load_json, save_json
     from transaction_logger import add_transaction, deduplicate, get_transactions
+
+
+def _preserve_original(file_path: str) -> str:
+    """
+    Copy file to ~/.finance/originals/ with a timestamp prefix.
+
+    Naming: YYYY-MM-DD_HH-MM-SS_<original_filename>
+    Ensures repeated imports of the same file never overwrite each other.
+
+    Returns the destination path, or empty string on failure (never raises).
+    """
+    try:
+        originals_dir = ensure_subdir("originals")
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        dest_name = f"{timestamp}_{os.path.basename(file_path)}"
+        dest = originals_dir / dest_name
+        shutil.copy2(file_path, dest)
+        return str(dest)
+    except Exception:
+        return ""
 
 
 def detect_format(file_path: str) -> str:
@@ -66,8 +87,15 @@ def import_file(
     format_hint: Optional[str] = None,
     currency: str = "EUR",
     dry_run: bool = True,
+    keep_original: bool = True,
 ) -> dict:
-    """Import transactions from a file. Returns preview or import result."""
+    """Import transactions from a file. Returns preview or import result.
+
+    Args:
+        keep_original: Copy the source file to ~/.finance/originals/ before
+            parsing (default True). The copy is timestamped so repeated imports
+            of the same file never overwrite each other. Set to False to skip.
+    """
     try:
         file_size = os.path.getsize(file_path)
         if file_size > MAX_IMPORT_BYTES:
@@ -77,6 +105,9 @@ def import_file(
             }
     except OSError as exc:
         return {"error": f"Cannot access file: {exc}", "file": file_path}
+
+    # Preserve the original before any parsing so we always have the raw source
+    original_saved = _preserve_original(file_path) if keep_original else ""
 
     fmt = format_hint or detect_format(file_path)
 
@@ -113,6 +144,7 @@ def import_file(
             "preview": [txn],
             "dry_run": dry_run,
             "scan_confidence": txn.get("scan_result", {}).get("confidence", "low"),
+            "original_saved": original_saved,
         }
         if not dry_run:
             add_transaction(
@@ -158,6 +190,7 @@ def import_file(
         "to_import": len(unique),
         "preview": unique[:10],
         "dry_run": dry_run,
+        "original_saved": original_saved,
     }
 
     if not dry_run and unique:
@@ -180,13 +213,16 @@ def import_file(
 
         # Log import
         log = load_json(get_import_log_path(), default={"imports": []})
-        log["imports"].append({
+        log_entry = {
             "timestamp": datetime.now().isoformat(),
             "file": os.path.basename(file_path),
             "format": fmt,
             "account_id": account_id,
             "imported": imported,
-        })
+        }
+        if original_saved:
+            log_entry["original_saved"] = original_saved
+        log["imports"].append(log_entry)
         save_json(get_import_log_path(), log)
 
     return result
@@ -210,6 +246,7 @@ def import_folder(
     folder_path: str,
     account_id: str = "default",
     dry_run: bool = True,
+    keep_original: bool = True,
 ) -> dict:
     """Import all supported files from a folder."""
     results = []
@@ -219,7 +256,10 @@ def import_folder(
             continue
         fmt = detect_format(full_path)
         if fmt != "unknown":
-            result = import_file(full_path, account_id, format_hint=fmt, dry_run=dry_run)
+            result = import_file(
+                full_path, account_id,
+                format_hint=fmt, dry_run=dry_run, keep_original=keep_original,
+            )
             results.append(result)
 
     return {

@@ -29,6 +29,6 @@ On return visits, greet like you're picking up a conversation. Reference somethi
 - "What could I deduct?" → tax-relevant items based on their country and situation
 
 ## Scope note
-This is a lite version. For CSV/bank import, Monte Carlo FIRE simulations, live portfolio prices, and encrypted local storage, see the full skill: github.com/googlarz/finance-assistant
+This is a lite version — conversational only, no file parsing. For CSV/bank import (with automatic originals backup), Monte Carlo FIRE simulations, live portfolio prices, and local SQLite storage, see the full skill: github.com/googlarz/finance-assistant
 
-Privacy: your financial profile lives only in this Project's memory.
+Privacy: your financial profile lives only in this Project's memory. Nothing is sent to any server beyond Anthropic's API.
