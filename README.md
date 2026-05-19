@@ -1,6 +1,23 @@
 # Finance Assistant
 
-> Personal finance copilot for **Claude Code** and **Claude Cowork** — budgets, savings goals, investments, debt optimization, taxes, insurance, net worth, bank import, scenario modeling, and Monte Carlo projections. Privacy-first: all data stays on your machine in a local SQLite database. Optional export encryption (Fernet AES) — no cloud sync, ever.
+**Real math. Real law. Your machine.**
+
+The precision of a tax accountant. The patience of a financial advisor.
+The privacy of a local app. Open source. Free forever.
+
+`6 locales` · `13 bank formats` · `7 financial domains` · `Monte Carlo FIRE`
+**claude.ai Projects** · **Claude Code** · **Claude Cowork**
+
+---
+
+| Without Finance Assistant | With Finance Assistant |
+|---|---|
+| YNAB: $15/month, your data on their servers | Free. SQLite on your machine. No subscription. |
+| TurboTax: form wizard, no "what if I go freelance?" | SE tax + QBI §199A calculated in conversation |
+| Generic ChatGPT: "I estimate your tax might be around…" | IRS Rev. Proc. 2024-40 applied to your actual income |
+| Spreadsheet FIRE model you rebuild every year | Monte Carlo + named scenarios, saved and compared |
+| UK pension: 20 min of Googling carry-forward rules | 3-year carry-forward with HMRC PTM057200, in seconds |
+| Different tool for each country | DE · UK · US · FR · NL · PL — same commands everywhere |
 
 <details>
 <summary>Generate this dashboard from your own data</summary>
