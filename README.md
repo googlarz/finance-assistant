@@ -10,6 +10,16 @@ The privacy of a local app. Open source. Free forever.
 
 ---
 
+Most people have a vague relationship with their finances. A rough sense of what they earn, a guess at what they owe in taxes, a hope that retirement will work out. Every tool that could help wants a monthly subscription and access to your bank account.
+
+Finance Assistant is different. It runs on your machine, stores everything in a local SQLite database, and uses Claude to turn your real numbers into real answers — not estimates, not vibes, not "consult a professional." When you ask about your SE tax, it applies IRS Rev. Proc. 2024-40 to your actual income. When you ask about your UK pension, it pulls HMRC's carry-forward rules for the last three years. When you run a FIRE simulation, it runs 10,000 Monte Carlo paths, not a back-of-napkin multiple.
+
+It works conversationally — no forms, no dashboards to fill in first. You tell it what you earn, what you owe, what you want. It remembers. It alerts you when something needs attention. It hands you a structured brief when you need a real accountant or adviser, and it gets out of the way when you don't.
+
+No subscription. No cloud. No guessing.
+
+---
+
 | Without Finance Assistant | With Finance Assistant |
 |---|---|
 | YNAB: $15/month, your data on their servers | Free. SQLite on your machine. No subscription. |
