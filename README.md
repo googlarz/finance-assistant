@@ -102,7 +102,7 @@ If you use Claude on the web or mobile and don't want to install anything, use t
 2. Paste the contents of [`projects-template/PROJECT_INSTRUCTIONS.md`](projects-template/PROJECT_INSTRUCTIONS.md) into the Project instructions field
 3. Start chatting — budgeting, debt advice, savings goals, net worth tracking, and tax questions all work conversationally
 
-This is a lite version: no CSV import, bank sync, Monte Carlo, or live prices. For those, use the full Claude Code skill below.
+**Limitations:** claude.ai runs in a browser and cannot access your computer's filesystem. That means no CSV import, no local SQLite database, no bank sync, no live prices, and no Monte Carlo simulations — those all require files or local storage that the browser can't reach. What works: conversational budgeting, tax questions, debt advice, savings goals, and net worth tracking based on what you tell it. For the full experience, use the Claude Code skill below.
 
 ---
 
