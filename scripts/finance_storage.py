@@ -258,6 +258,39 @@ def save_to_db(table: str, data: dict, pk_col: str = "id") -> bool:
         return False
 
 
+# ── Inbox (file drop zone — home-anchored for launchd stability) ─────────────
+
+def get_inbox_dir() -> Path:
+    """Global inbox: ~/.finance/inbox/ — stable path for launchd WatchPaths."""
+    inbox = Path.home() / ".finance" / "inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+    return inbox
+
+
+def get_inbox_manifest_path() -> Path:
+    return get_inbox_dir() / "manifest.json"
+
+
+def get_inbox_queue_path() -> Path:
+    return get_inbox_dir() / "queue.json"
+
+
+# ── Alert Telemetry ───────────────────────────────────────────────────────────
+
+def get_alert_telemetry_dir() -> Path:
+    return ensure_subdir("alert_telemetry")
+
+
+def get_alert_fire_log_path() -> Path:
+    return ensure_subdir("alert_telemetry") / "fire_log.jsonl"
+
+
+# ── Monitor State ─────────────────────────────────────────────────────────────
+
+def get_monitor_state_path() -> Path:
+    return ensure_subdir("workspace") / "monitor_state.json"
+
+
 # ── Migration from .taxde/ ───────────────────────────────────────────────────
 
 def get_legacy_taxde_dir() -> Path:
