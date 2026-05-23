@@ -234,6 +234,97 @@ def project_portfolio_growth(
     return projections
 
 
+def get_portfolio_drift() -> dict:
+    """
+    Compare current allocation against target allocation.
+
+    Returns a dict with:
+      has_target (bool) — False if no target allocation has been set
+      total_value (float) — total portfolio value
+      drifts (list) — one entry per asset type:
+          asset_type, current_pct, target_pct, drift_pct, rebalance_amount
+          drift_pct > 0 → overweight (consider selling)
+          drift_pct < 0 → underweight (consider buying)
+      max_drift_pct (float) — largest absolute drift across all asset types
+    """
+    portfolio = _load_portfolio()
+    target = portfolio.get("target_allocation", {})
+    if not target:
+        return {"has_target": False, "drifts": [], "total_value": 0.0, "max_drift_pct": 0.0}
+
+    alloc = calculate_allocation()
+    total = alloc["total_value"]
+    if total <= 0:
+        return {"has_target": True, "drifts": [], "total_value": 0.0, "max_drift_pct": 0.0}
+
+    drifts = []
+    all_types = set(target.keys()) | set(alloc["allocation"].keys())
+    for asset_type in sorted(all_types):
+        current_pct = alloc["allocation"].get(asset_type, {}).get("pct", 0.0)
+        target_pct = float(target.get(asset_type, 0))
+        drift_pct = round(current_pct - target_pct, 1)
+        rebalance_amount = round((drift_pct / 100) * total, 2)
+        drifts.append({
+            "asset_type": asset_type,
+            "current_pct": current_pct,
+            "target_pct": target_pct,
+            "drift_pct": drift_pct,
+            "rebalance_amount": rebalance_amount,
+        })
+
+    max_drift = max((abs(d["drift_pct"]) for d in drifts), default=0.0)
+    return {
+        "has_target": True,
+        "total_value": total,
+        "drifts": drifts,
+        "max_drift_pct": max_drift,
+    }
+
+
+def format_drift_report() -> str:
+    """Format a portfolio drift report for display."""
+    result = get_portfolio_drift()
+    if not result.get("has_target"):
+        return (
+            "No target allocation set.\n"
+            "Tell me your targets, e.g. 'Set my target allocation to 70% stocks, 20% bonds, 10% cash'."
+        )
+    drifts = result["drifts"]
+    if not drifts:
+        return "Portfolio is empty — no drift to calculate."
+
+    total = result["total_value"]
+    lines = [
+        "═══ Portfolio Drift ═══",
+        f"Total value: {format_money(total, 'EUR')}\n",
+        f"{'Asset type':<20} {'Current':>8} {'Target':>8} {'Drift':>8} {'Action':>18}",
+        "─" * 66,
+    ]
+    for d in sorted(drifts, key=lambda x: abs(x["drift_pct"]), reverse=True):
+        label = ASSET_TYPES.get(d["asset_type"], d["asset_type"])
+        drift = d["drift_pct"]
+        amount = abs(d["rebalance_amount"])
+        if drift > 0:
+            action = f"sell {format_money(amount, 'EUR')}"
+        elif drift < 0:
+            action = f"buy  {format_money(amount, 'EUR')}"
+        else:
+            action = "on target"
+        lines.append(
+            f"{label:<20} {d['current_pct']:>7.1f}% {d['target_pct']:>7.1f}% {drift:>+7.1f}% {action:>18}"
+        )
+
+    max_drift = result["max_drift_pct"]
+    lines.append("")
+    if max_drift < 5:
+        lines.append(f"Portfolio is well-balanced. Max drift: {max_drift:.1f}%.")
+    elif max_drift < 10:
+        lines.append(f"Minor drift ({max_drift:.1f}%). Rebalancing optional.")
+    else:
+        lines.append(f"Rebalancing recommended — max drift {max_drift:.1f}%.")
+    return "\n".join(lines)
+
+
 def take_portfolio_snapshot() -> dict:
     """Take a point-in-time snapshot of the portfolio."""
     portfolio = _load_portfolio()

@@ -355,6 +355,115 @@ def _threshold_alerts(profile: dict) -> list[dict]:
         return []
 
 
+# ── US Quarterly Estimated Tax Alerts ────────────────────────────────────────
+
+def _quarterly_us_tax_alert(today: date) -> list[dict]:
+    """
+    Alert US self-employed users when an IRS estimated tax deadline is within 30 days.
+
+    Uses get_quarterly_deadlines() from the US locale — deadlines are already
+    stored in tax_rules.py, so no network call is needed.
+    """
+    alerts = []
+    try:
+        import os as _os
+        import sys as _sys
+        _root = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), ".."))
+        if _root not in _sys.path:
+            _sys.path.insert(0, _root)
+        from locales.us.tax_calculator import get_quarterly_deadlines  # type: ignore[import]
+    except ImportError:
+        return alerts
+
+    # Check current year + next year: Q4 of year N is due in January of year N+1.
+    # Deduplicate by due date — a year without its own rules falls back to the
+    # most-recent known year, which could produce the same deadline twice.
+    seen_dues: set[str] = set()
+    for year in [today.year, today.year + 1]:
+        try:
+            deadlines = get_quarterly_deadlines(year)
+        except Exception:
+            continue
+        for d in deadlines:
+            due_str = d.get("due", "")
+            if not due_str:
+                continue
+            try:
+                due = date.fromisoformat(due_str)
+            except ValueError:
+                continue
+            if due_str in seen_dues:
+                continue
+            seen_dues.add(due_str)
+            days_until = (due - today).days
+            if days_until < 0 or days_until > 30:
+                continue
+            quarter = d.get("quarter", "?")
+            period = d.get("period", "")
+            if days_until <= 7:
+                urgency = "critical"
+            elif days_until <= 21:
+                urgency = "warning"
+            else:
+                urgency = "info"
+            alerts.append(_alert(
+                urgency, "tax",
+                f"Q{quarter} estimated tax due in {days_until} day{'s' if days_until != 1 else ''}",
+                f"Form 1040-ES · {period} · Due {due.strftime('%b %-d, %Y')}",
+                (
+                    f"Ask: 'What do I owe for Q{quarter} estimated taxes?' "
+                    "then pay at IRS Direct Pay (irs.gov/payments) or EFTPS."
+                ),
+            ))
+    return alerts
+
+
+# ── Portfolio Drift Alert ─────────────────────────────────────────────────────
+
+def _portfolio_drift_alert(profile: dict) -> list[dict]:
+    """
+    Alert when any asset class has drifted ≥10% from the target allocation.
+    Requires a target_allocation to be set in the portfolio file — silently
+    skips if none is configured (no false alarms for users who don't use
+    target allocations).
+    """
+    try:
+        from investment_tracker import get_portfolio_drift  # type: ignore[import]
+    except ImportError:
+        return []
+    try:
+        drift = get_portfolio_drift()
+    except Exception:
+        return []
+
+    if not drift.get("has_target"):
+        return []
+
+    large_drifts = [d for d in drift.get("drifts", []) if abs(d["drift_pct"]) >= 10]
+    if not large_drifts:
+        return []
+
+    overweight = [d for d in large_drifts if d["drift_pct"] > 0]
+    underweight = [d for d in large_drifts if d["drift_pct"] < 0]
+    parts = []
+    if overweight:
+        parts.append("overweight: " + ", ".join(
+            f"{d['asset_type']} (+{d['drift_pct']:.0f}%)" for d in overweight
+        ))
+    if underweight:
+        parts.append("underweight: " + ", ".join(
+            f"{d['asset_type']} ({d['drift_pct']:.0f}%)" for d in underweight
+        ))
+
+    n = len(large_drifts)
+    return [_alert(
+        "info", "portfolio",
+        f"Portfolio drift: {n} asset class{'es' if n != 1 else ''} off target by ≥10%",
+        "; ".join(parts),
+        "Say 'show portfolio drift' or 'how should I rebalance?' for a full rebalancing plan.",
+    )]
+
+
 # ── Main Entry Point ──────────────────────────────────────────────────────────
 
 def get_session_alerts(profile: Optional[dict] = None) -> list[dict]:
@@ -373,8 +482,11 @@ def get_session_alerts(profile: Optional[dict] = None) -> list[dict]:
     all_alerts.extend(_recurring_alerts(today))
     all_alerts.extend(_goal_alerts(today))
     all_alerts.extend(_tax_alerts(today, locale))
+    if locale == "us":
+        all_alerts.extend(_quarterly_us_tax_alert(today))
     all_alerts.extend(_fire_alert(profile, today))
     all_alerts.extend(_threshold_alerts(profile))
+    all_alerts.extend(_portfolio_drift_alert(profile))
 
     # Timeline narrative bullets as info alerts
     try:

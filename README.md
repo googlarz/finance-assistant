@@ -29,14 +29,11 @@ No subscription. No cloud. No guessing.
 | UK pension: 20 min of Googling carry-forward rules | 3-year carry-forward with HMRC PTM057200, in seconds |
 | Different tool for each country | DE · UK · US · FR · NL · PL — same commands everywhere |
 
-<details>
-<summary>Generate this dashboard from your own data</summary>
-
+**See the output in 30 seconds** — [screenshot](#screenshot)
 ```bash
-python3 skill.py --demo    # seed sample data → open ~/.finance/dashboard_demo.html
+python3 skill.py --demo       # seed sample data → open ~/.finance/dashboard_demo.html
 python3 skill.py --dashboard  # generate from your real data → ~/.finance/dashboard.html
 ```
-</details>
 
 ---
 
