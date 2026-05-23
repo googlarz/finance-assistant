@@ -17,7 +17,7 @@ from onboarding import (
     get_resume_message, get_completion_message, get_onboarding_state,
 )
 
-__version__ = "3.4.0"
+__version__ = "3.6.0"
 
 _timeline_ctx: dict = {}
 
@@ -106,14 +106,25 @@ def main() -> str:
 
     profile_display = display_profile(compact=True)
 
-    # Surface proactive alerts after the profile summary
+    # Phase 3: two-tier monitor output
     try:
-        from session_alerts import get_session_alerts, format_alerts
+        from session_alerts import get_session_alerts
+        from financial_monitor import build_monitor_context, format_monitor_output
         alerts = get_session_alerts(profile)
         if alerts:
-            return profile_display + "\n\n" + format_alerts(alerts)
+            context = build_monitor_context(profile, alerts)
+            monitor_output = format_monitor_output(context)
+            if monitor_output:
+                return profile_display + "\n\n" + monitor_output
     except Exception:
-        pass  # Alerts must never crash the skill
+        # Fall back to legacy flat alerts
+        try:
+            from session_alerts import get_session_alerts, format_alerts
+            alerts = get_session_alerts(profile)
+            if alerts:
+                return profile_display + "\n\n" + format_alerts(alerts)
+        except Exception:
+            pass  # Alerts must never crash the skill
 
     # Data coach nudge (only when no other alerts to avoid noise)
     try:
@@ -127,6 +138,113 @@ def main() -> str:
     return profile_display
 
 
+def _setup_watcher() -> None:
+    """Install a launchd WatchPaths plist to watch ~/.finance/inbox/ on macOS."""
+    import pathlib
+    import subprocess
+
+    skill_path = pathlib.Path(__file__).resolve()
+    inbox_dir = pathlib.Path.home() / ".finance" / "inbox"
+    inbox_dir.mkdir(parents=True, exist_ok=True)
+
+    label = "com.financeassistant.inbox-watcher"
+    plist_path = pathlib.Path.home() / "Library" / "LaunchAgents" / f"{label}.plist"
+
+    plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{label}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{sys.executable}</string>
+        <string>{skill_path}</string>
+        <string>--scan-inbox</string>
+    </array>
+    <key>WatchPaths</key>
+    <array>
+        <string>{inbox_dir}</string>
+    </array>
+    <key>StandardOutPath</key>
+    <string>{pathlib.Path.home()}/.finance/inbox-watcher.log</string>
+    <key>StandardErrorPath</key>
+    <string>{pathlib.Path.home()}/.finance/inbox-watcher-error.log</string>
+</dict>
+</plist>"""
+
+    print("Inbox watcher plist:")
+    print("─" * 60)
+    print(plist_content)
+    print("─" * 60)
+    print(f"\nWill install to: {plist_path}")
+    print(f"Watches: {inbox_dir}")
+    print(f"\nProceed? [y/N] ", end="", flush=True)
+
+    try:
+        response = input().strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print("\nAborted.")
+        return
+    if response != "y":
+        print("Aborted.")
+        return
+
+    plist_path.parent.mkdir(parents=True, exist_ok=True)
+    plist_path.write_text(plist_content)
+    print(f"\n✓ Plist written to {plist_path}")
+
+    try:
+        subprocess.run(["launchctl", "load", str(plist_path)], check=True)
+        print("✓ Watcher loaded by launchd.")
+        print(f"\nDrop files into {inbox_dir} — Finance Assistant will detect them automatically.")
+    except subprocess.CalledProcessError as exc:
+        print(f"⚠  launchctl load failed: {exc}")
+        print(f"Try manually: launchctl load {plist_path}")
+    except FileNotFoundError:
+        print("(launchctl not found — are you on macOS?)")
+        print("Plist is ready; activate with: launchctl load", plist_path)
+
+
+def _setup_ambient_context() -> None:
+    """Install a PreCompact hook that injects a compact financial snapshot."""
+    import json
+    import pathlib
+
+    settings_path = pathlib.Path.home() / ".claude" / "settings.json"
+    try:
+        existing = json.loads(settings_path.read_text()) if settings_path.exists() else {}
+    except Exception:
+        existing = {}
+
+    skill_path = pathlib.Path(__file__).resolve()
+    hook_cmd = (
+        f"python3 {skill_path} --ambient-snapshot 2>/dev/null | "
+        r"jq -Rs '{hookSpecificOutput:{hookEventName:\"PreCompact\",additionalContext:.}}'"
+    )
+
+    hooks = existing.setdefault("hooks", {})
+    pre_compact = hooks.setdefault("PreCompact", [])
+    # Avoid duplicates
+    for entry in pre_compact:
+        for h in entry.get("hooks", []):
+            if "ambient-snapshot" in h.get("command", ""):
+                print("Ambient context hook already installed.")
+                return
+
+    pre_compact.append({
+        "matcher": "manual",
+        "hooks": [{"type": "command", "command": hook_cmd, "timeout": 10}],
+    })
+
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(json.dumps(existing, indent=2))
+    print(f"✓ Ambient context hook added to {settings_path}")
+    print("  On every /compact, a brief financial snapshot will be injected.")
+    print("  Remove by editing hooks.PreCompact in ~/.claude/settings.json")
+
+
 if __name__ == "__main__":
     if "--version" in sys.argv:
         print(f"finance-assistant {__version__}")
@@ -137,6 +255,60 @@ if __name__ == "__main__":
         checks = run_checks()
         print(format_results(checks))
         sys.exit(0 if all(c["status"] != "fail" for c in checks) else 1)
+
+    if "--scan-inbox" in sys.argv:
+        # Called by launchd WatchPaths when inbox folder changes
+        from inbox_scanner import scan_inbox
+        result = scan_inbox()
+        if result["new_files"]:
+            print(f"Inbox: {len(result['new_files'])} new file(s) queued")
+        sys.exit(0)
+
+    if "--inbox" in sys.argv:
+        from inbox_scanner import format_inbox_status
+        print(format_inbox_status())
+        sys.exit(0)
+
+    if "--setup-watcher" in sys.argv:
+        _setup_watcher()
+        sys.exit(0)
+
+    if "--setup-ambient-context" in sys.argv:
+        _setup_ambient_context()
+        sys.exit(0)
+
+    if "--alert-stats" in sys.argv:
+        from alert_telemetry import format_alert_stats
+        days = 30
+        for i, arg in enumerate(sys.argv):
+            if arg == "--days" and i + 1 < len(sys.argv):
+                try:
+                    days = int(sys.argv[i + 1])
+                except ValueError:
+                    pass
+        print(format_alert_stats(days))
+        sys.exit(0)
+
+    if "--clear-suppression" in sys.argv:
+        from alert_telemetry import clear_suppression
+        domain = None
+        for i, arg in enumerate(sys.argv):
+            if arg == "--domain" and i + 1 < len(sys.argv):
+                domain = sys.argv[i + 1]
+        n = clear_suppression(domain)
+        label = f" for domain '{domain}'" if domain else ""
+        print(f"Cleared {n} suppressed condition(s){label}.")
+        sys.exit(0)
+
+    if "--ambient-snapshot" in sys.argv:
+        _setup_db()
+        profile = get_profile()
+        if profile:
+            from financial_monitor import get_ambient_snapshot
+            snapshot = get_ambient_snapshot(profile)
+            if snapshot:
+                print(snapshot)
+        sys.exit(0)
 
     if "--demo" in sys.argv:
         from scripts.demo_data import seed_demo_data

@@ -464,6 +464,45 @@ def _portfolio_drift_alert(profile: dict) -> list[dict]:
     )]
 
 
+# ── Inbox Alert ──────────────────────────────────────────────────────────────
+
+def _inbox_alert() -> list[dict]:
+    """Alert when files are waiting in the inbox for review/import."""
+    try:
+        from inbox_scanner import get_pending_items
+    except ImportError:
+        return []
+    try:
+        pending = get_pending_items()
+    except Exception:
+        return []
+    if not pending:
+        return []
+
+    if len(pending) == 1:
+        item = pending[0]
+        name = item.get("name", "file")
+        preview = item.get("preview", {})
+        if preview.get("importable"):
+            txn = preview.get("transaction_count", "?")
+            detail = f"{name} — {txn} transactions ready to import"
+        else:
+            detail = f"{name} — awaiting review"
+        return [_alert(
+            "warning", "inbox",
+            "File waiting in inbox",
+            detail,
+            "Say 'show inbox' to preview and import.",
+        )]
+
+    return [_alert(
+        "warning", "inbox",
+        f"{len(pending)} files waiting in inbox",
+        "Bank statements or other financial files ready to review",
+        "Say 'show inbox' to preview and import all files.",
+    )]
+
+
 # ── Main Entry Point ──────────────────────────────────────────────────────────
 
 def get_session_alerts(profile: Optional[dict] = None) -> list[dict]:
@@ -478,6 +517,7 @@ def get_session_alerts(profile: Optional[dict] = None) -> list[dict]:
     locale = profile.get("meta", {}).get("locale", "de")
 
     all_alerts: list[dict] = []
+    all_alerts.extend(_inbox_alert())
     all_alerts.extend(_budget_alerts(today))
     all_alerts.extend(_recurring_alerts(today))
     all_alerts.extend(_goal_alerts(today))
@@ -549,6 +589,20 @@ def get_session_alerts(profile: Optional[dict] = None) -> list[dict]:
             ))
     except Exception:
         pass  # Never crash the session over a price staleness check
+
+    # Phase 2: telemetry + condition-delta suppression
+    # Critical alerts never suppressed. Inbox alerts never suppressed.
+    try:
+        from alert_telemetry import is_suppressed, mark_fired, log_fired as _log_fired
+        to_emit = []
+        for alert in all_alerts:
+            if not is_suppressed(alert):
+                mark_fired(alert)
+                _log_fired(alert)
+                to_emit.append(alert)
+        all_alerts = to_emit
+    except Exception:
+        pass  # Telemetry must never crash alerts
 
     # Sort: critical → warning → info, then by domain
     order = {u: i for i, u in enumerate(URGENCY_LEVELS)}
