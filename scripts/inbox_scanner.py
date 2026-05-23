@@ -83,24 +83,42 @@ def _preview_file(file_path: Path) -> dict:
         import sys
         sys.path.insert(0, os.path.dirname(__file__))
         from import_router import import_file
-        result = import_file(str(file_path), dry_run=True)
+        # account_id="__preview__" — deduplication runs against an empty account,
+        # so all rows appear as unique. Accurate for counting; not for dedup.
+        result = import_file(str(file_path), account_id="__preview__", dry_run=True)
         return {
             "importable": True,
             "format": result.get("format", "unknown"),
-            "transaction_count": result.get("transaction_count", 0),
+            "transaction_count": result.get("to_import", result.get("total_normalized", 0)),
+            "total_parsed": result.get("total_parsed", 0),
+            "duplicates_removed": result.get("duplicates_removed", 0),
             "date_range": result.get("date_range", ""),
-            "account": result.get("account", ""),
+            "account": result.get("account_id", ""),
         }
     except Exception as exc:
         return {"importable": False, "error": str(exc)}
 
 
-def _do_import(file_path: Path) -> dict:
-    """Actually import a file (commit mode)."""
+def _do_import(file_path: Path, account_id: str = "") -> dict:
+    """Actually import a file (commit mode). Returns reconciliation numbers."""
     try:
         from import_router import import_file
-        result = import_file(str(file_path), dry_run=False)
-        return {"success": True, **result}
+        if not account_id:
+            # Fall back to first available account
+            try:
+                from account_manager import list_accounts
+                accounts = list_accounts()
+                account_id = accounts[0]["id"] if accounts else "__unknown__"
+            except Exception:
+                account_id = "__unknown__"
+        result = import_file(str(file_path), account_id=account_id, dry_run=False)
+        return {
+            "success": True,
+            "imported": result.get("imported", 0),
+            "total_parsed": result.get("total_parsed", 0),
+            "duplicates_removed": result.get("duplicates_removed", 0),
+            **result,
+        }
     except Exception as exc:
         return {"success": False, "error": str(exc)}
 
@@ -237,16 +255,29 @@ def format_inbox_status() -> str:
     lines = [f"**Inbox: {len(pending)} pending file(s)**\n"]
     for item in pending:
         preview = item.get("preview", {})
-        if preview.get("importable"):
+        import_result = item.get("import_result", {})
+        name = item["name"]
+
+        if item.get("status") == "imported" and import_result:
+            # Show reconciliation: what actually changed
+            imported = import_result.get("imported", 0)
+            dupes = import_result.get("duplicates_removed", 0)
+            parsed = import_result.get("total_parsed", imported + dupes)
+            recon = f"{imported} new"
+            if dupes:
+                recon += f", {dupes} duplicate{'s' if dupes != 1 else ''} skipped"
+            lines.append(f"• **{name}** ✓ imported — {parsed} parsed, {recon}")
+        elif preview.get("importable"):
             txn = preview.get("transaction_count", "?")
             fmt = preview.get("format", "unknown")
             date_range = preview.get("date_range", "")
+            dupes = preview.get("duplicates_removed", 0)
             date_part = f" · {date_range}" if date_range else ""
-            lines.append(f"• **{item['name']}** — {txn} transactions ({fmt}{date_part})")
-            name_str = item["name"]
-            lines.append(f"  → Say 'import {name_str}' to add to your account.")
+            dupe_note = f" ({dupes} likely duplicates)" if dupes else ""
+            lines.append(f"• **{name}** — {txn} transactions ({fmt}{date_part}{dupe_note})")
+            lines.append(f"  → Say 'import {name}' to add to your account.")
         else:
             err = preview.get("error", "unrecognized format")
-            lines.append(f"• **{item['name']}** — ⚠ {err}")
+            lines.append(f"• **{name}** — ⚠ {err}")
 
     return "\n".join(lines)
