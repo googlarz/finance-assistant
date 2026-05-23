@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Finance Assistant — Live Demo</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --yellow: #d29922;
+      --red: #f85149;
+      --orange: #db6d28;
+      --purple: #bc8cff;
+      --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f6f8fa;
+        --surface: #ffffff;
+        --border: #d0d7de;
+        --text: #1f2328;
+        --muted: #656d76;
+        --accent: #0969da;
+        --green: #1a7f37;
+        --yellow: #9a6700;
+        --red: #cf222e;
+      }
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .logo { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+    .logo span { color: var(--accent); }
+    .badge {
+      font-size: 0.75rem;
+      padding: 2px 8px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    header a {
+      margin-left: auto;
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.875rem;
+      border: 1px solid var(--border);
+      padding: 5px 12px;
+      border-radius: 6px;
+    }
+    header a:hover { background: var(--surface); }
+
+    .hero {
+      text-align: center;
+      padding: 48px 24px 32px;
+      max-width: 680px;
+      margin: 0 auto;
+    }
+    .hero h1 { font-size: 2rem; font-weight: 700; margin-bottom: 12px; }
+    .hero p { color: var(--muted); font-size: 1rem; max-width: 520px; margin: 0 auto 24px; }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+      justify-content: center;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+    }
+    .tab {
+      padding: 6px 16px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      font-size: 0.875rem;
+      background: none;
+      color: var(--muted);
+      transition: all 0.15s;
+    }
+    .tab.active, .tab:hover { background: var(--surface); color: var(--text); border-color: var(--accent); }
+    .tab.active { color: var(--accent); }
+
+    .demo-area {
+      max-width: 820px;
+      margin: 0 auto 64px;
+      padding: 0 16px;
+    }
+
+    .scenario { display: none; }
+    .scenario.active { display: block; }
+
+    /* Claude conversation */
+    .conversation { display: flex; flex-direction: column; gap: 0; }
+
+    .msg {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .msg:first-child { border-top: 1px solid var(--border); }
+
+    .msg-header {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .msg-header.user { color: var(--accent); }
+    .msg-header.assistant { color: var(--green); }
+
+    .avatar {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .avatar.user { background: var(--accent); color: white; }
+    .avatar.assistant { background: var(--green); color: white; }
+
+    .msg-body { color: var(--text); font-size: 0.9375rem; }
+    .msg-body p { margin-bottom: 10px; }
+    .msg-body p:last-child { margin-bottom: 0; }
+
+    /* Terminal block */
+    .terminal {
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      margin: 16px 0;
+      font-family: var(--mono);
+      font-size: 0.8125rem;
+    }
+    .terminal-bar {
+      background: #21262d;
+      padding: 8px 12px;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .dot.r { background: #ff5f57; }
+    .dot.y { background: #febc2e; }
+    .dot.g { background: #28c840; }
+    .terminal-label { font-size: 0.75rem; color: #8b949e; margin-left: 6px; }
+    .terminal-body {
+      padding: 16px;
+      color: #e6edf3;
+      line-height: 1.7;
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    /* Inline formatting in FA output */
+    .fa-output { font-family: var(--mono); font-size: 0.8125rem; line-height: 1.8; }
+    .fa-critical { color: var(--red); }
+    .fa-warning { color: var(--yellow); }
+    .fa-info { color: var(--accent); }
+    .fa-good { color: var(--green); }
+    .fa-bold { font-weight: 700; color: var(--text); }
+    .fa-muted { color: var(--muted); }
+    .fa-section { color: var(--purple); font-weight: 600; }
+
+    table.fa-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      margin: 8px 0;
+    }
+    table.fa-table th {
+      text-align: left;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      padding: 4px 8px;
+      font-weight: 400;
+    }
+    table.fa-table td { padding: 3px 8px; }
+    table.fa-table tr:hover { background: rgba(255,255,255,0.03); }
+
+    /* Stat cards */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      margin: 12px 0;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .stat-label { font-size: 0.75rem; color: var(--muted); margin-bottom: 4px; }
+    .stat-value { font-size: 1.25rem; font-weight: 700; font-family: var(--mono); }
+    .stat-sub { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+    .stat-card.up .stat-value { color: var(--green); }
+    .stat-card.warn .stat-value { color: var(--yellow); }
+    .stat-card.crit .stat-value { color: var(--red); }
+
+    /* Progress bar */
+    .progress-wrap { margin: 8px 0; }
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      margin-bottom: 4px;
+      color: var(--muted);
+    }
+    .progress-bar {
+      height: 8px;
+      background: var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .progress-fill { height: 100%; border-radius: 4px; }
+    .progress-fill.green { background: var(--green); }
+    .progress-fill.yellow { background: var(--yellow); }
+    .progress-fill.red { background: var(--red); }
+    .progress-fill.accent { background: var(--accent); }
+
+    .inline-pill {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 10px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .pill-red { background: rgba(248,81,73,0.15); color: var(--red); }
+    .pill-yellow { background: rgba(210,153,34,0.15); color: var(--yellow); }
+    .pill-green { background: rgba(63,185,80,0.15); color: var(--green); }
+    .pill-blue { background: rgba(88,166,255,0.15); color: var(--accent); }
+
+    footer {
+      text-align: center;
+      padding: 32px;
+      color: var(--muted);
+      font-size: 0.8rem;
+      border-top: 1px solid var(--border);
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Finance <span>Assistant</span></div>
+  <span class="badge">v3.6.0</span>
+  <span class="badge">open source</span>
+  <span class="badge">local-first</span>
+  <a href="https://github.com/googlarz/finance-assistant" target="_blank">★ GitHub</a>
+</header>
+
+<div class="hero">
+  <h1>Real math. Real law. Your machine.</h1>
+  <p>The precision of a tax accountant. The patience of a financial advisor. The privacy of a local app. No subscription. No cloud. No guessing.</p>
+  <div class="tabs">
+    <button class="tab active" onclick="show('session')">Session start</button>
+    <button class="tab" onclick="show('tax')">Tax calculation</button>
+    <button class="tab" onclick="show('fire')">FIRE simulation</button>
+    <button class="tab" onclick="show('import')">Bank import</button>
+  </div>
+</div>
+
+<div class="demo-area">
+
+  <!-- ── Scenario 1: Session start ─────────────────────────────────────── -->
+  <div class="scenario active" id="s-session">
+    <div class="conversation">
+      <div class="msg">
+        <div class="msg-header assistant">
+          <div class="avatar assistant">FA</div> Finance Assistant — session start
+        </div>
+        <div class="msg-body">
+          <div class="stat-grid">
+            <div class="stat-card up">
+              <div class="stat-label">Net worth</div>
+              <div class="stat-value">€34,210</div>
+              <div class="stat-sub">↑ €2,100 this month</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Savings rate</div>
+              <div class="stat-value">22%</div>
+              <div class="stat-sub">above 20% target</div>
+            </div>
+            <div class="stat-card warn">
+              <div class="stat-label">FIRE progress</div>
+              <div class="stat-value">19.5%</div>
+              <div class="stat-sub">€34k / €175k target</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Locale</div>
+              <div class="stat-value" style="font-size:1rem;">🇩🇪 DE</div>
+              <div class="stat-sub">Berlin · €58k gross</div>
+            </div>
+          </div>
+
+          <p style="margin-top:16px;"><strong>Needs attention:</strong></p>
+          <div class="terminal" style="margin-top:8px;">
+            <div class="terminal-body"><span class="fa-warning">[~]</span> <span class="fa-bold">Budget almost full: Eating Out</span> — Used 89% (€178/€200) with 12 days left
+   → Slow down Eating Out spending or increase the budget.
+
+<span class="fa-warning">[~]</span> <span class="fa-bold">Goal deadline approaching: Emergency Fund</span> — 81% funded (€8,100/€10,000), 28d left
+   → Need €67.86/day to reach goal by 21 Jun.
+
+<span class="fa-info">[i]</span> <span class="fa-bold">FIRE progress: 19.5%</span>
+   [████░░░░░░░░░░░░░░░░] €34,210 / €175,000
+
+<span class="fa-muted">2 background items: investments, data_coach — say 'show all alerts' for details.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="msg">
+        <div class="msg-header user"><div class="avatar user">U</div> You</div>
+        <div class="msg-body"><p>How close am I to my emergency fund goal?</p></div>
+      </div>
+
+      <div class="msg">
+        <div class="msg-header assistant"><div class="avatar assistant">FA</div> Finance Assistant</div>
+        <div class="msg-body">
+          <p>You're at <strong>€8,100 of your €10,000 emergency fund target</strong> — 81% funded, with 28 days until your June 21st deadline.</p>
+          <div class="progress-wrap">
+            <div class="progress-label"><span>Emergency Fund</span><span>81% · €1,900 to go</span></div>
+            <div class="progress-bar"><div class="progress-fill yellow" style="width:81%"></div></div>
+          </div>
+          <p>To hit the target on time you'd need to save <strong>€67.86/day</strong> — about €476/week. At your current savings rate of 22% (≈€1,065/month), you'll fall roughly €900 short unless you accelerate.</p>
+          <p><strong>Options:</strong></p>
+          <p>① Pause your Depot contributions for June (€300/mo) — closes €900 of the gap<br>
+          ② Extend the deadline by 4–5 weeks — no change to contributions needed<br>
+          ③ Both: hit target on time with a small Depot pause</p>
+          <p>Which would you like me to model?</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Scenario 2: Tax calculation ────────────────────────────────────── -->
+  <div class="scenario" id="s-tax">
+    <div class="conversation">
+      <div class="msg">
+        <div class="msg-header user"><div class="avatar user">U</div> You</div>
+        <div class="msg-body"><p>I'm thinking of going freelance next year. What would my tax look like on €80,000 revenue?</p></div>
+      </div>
+
+      <div class="msg">
+        <div class="msg-header assistant"><div class="avatar assistant">FA</div> Finance Assistant</div>
+        <div class="msg-body">
+          <p>Running the 2025 German tax calculation for <strong>€80,000 self-employed revenue</strong>:</p>
+          <div class="terminal">
+            <div class="terminal-bar">
+              <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+              <span class="terminal-label">DE 2025 · §15 EStG · Single filer</span>
+            </div>
+            <div class="terminal-body"><span class="fa-section">Revenue</span>                     €80,000.00
+<span class="fa-section">Business expenses (est.)</span>    <span class="fa-muted">−€8,000.00  (10% assumption — adjust below)</span>
+<span class="fa-bold">Profit / taxable base</span>       €72,000.00
+
+<span class="fa-section">── Income tax (EStG §32a) ──────────────────────</span>
+  Grundfreibetrag 2025         −€12,096.00
+  Taxable income               €59,904.00
+  Progressive rate (24–42%)    <span class="fa-warning">€15,872.00</span>
+
+<span class="fa-section">── Solidarity surcharge (Soli) ─────────────────</span>
+  Threshold (§3 Nr.56 SolZG)   €18,130 tax → above threshold
+  Soli (5.5% × €15,872)        <span class="fa-muted">€872.96</span>
+
+<span class="fa-section">── KV + PV (GKV estimate) ──────────────────────</span>
+  Health insurance (14.6%)     €8,352.00
+  Long-term care (3.6%)        €2,059.20
+  <span class="fa-muted">Note: self-employed pay both halves</span>
+
+<span class="fa-bold">── Summary ─────────────────────────────────────</span>
+  Gross revenue                €80,000
+  Income tax + Soli            <span class="fa-warning">€16,744.96</span>
+  Health + care insurance      <span class="fa-warning">€10,411.20</span>
+  <span class="fa-bold">Take-home (net)</span>             <span class="fa-good">≈ €44,843</span>  <span class="fa-muted">(56.1% of revenue)</span></div>
+          </div>
+          <p><span class="inline-pill pill-yellow">⚠ KV estimate</span> GKV contribution is approximated — exact rate depends on your Krankenkasse and Zusatzbeitrag. The 2025 Mindestbeitrag is €200.40/month if income is low.</p>
+          <p>Want me to model a specific expenses figure, or run the comparison with Lohnsteuer as an employee at €80k?</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Scenario 3: FIRE simulation ───────────────────────────────────── -->
+  <div class="scenario" id="s-fire">
+    <div class="conversation">
+      <div class="msg">
+        <div class="msg-header user"><div class="avatar user">U</div> You</div>
+        <div class="msg-body"><p>Run a Monte Carlo FIRE simulation. I want to retire at 50.</p></div>
+      </div>
+
+      <div class="msg">
+        <div class="msg-header assistant"><div class="avatar assistant">FA</div> Finance Assistant</div>
+        <div class="msg-body">
+          <p>Running 10,000 Monte Carlo paths for retirement at 50 (23 years from now), drawing €2,800/month (today's money) adjusted for 2% inflation:</p>
+
+          <div class="terminal">
+            <div class="terminal-bar">
+              <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+              <span class="terminal-label">Monte Carlo · 10,000 paths · 7% µ · 15% σ</span>
+            </div>
+            <div class="terminal-body"><span class="fa-section">── Current state ───────────────────────────────</span>
+  Portfolio today              €34,210
+  Monthly contribution         €850 (current savings rate)
+  Time horizon                 23 years to retirement
+
+<span class="fa-section">── Projected at retirement (age 50) ────────────</span>
+  Median portfolio             <span class="fa-good">€712,400</span>
+  10th percentile (bad luck)   <span class="fa-warning">€398,200</span>
+  90th percentile (good luck)  €1,241,000
+
+<span class="fa-section">── FIRE number required ────────────────────────</span>
+  Annual expenses (inflation)  €2,800 × 12 × (1.02²³) = €53,400/yr
+  4% safe withdrawal rate      €53,400 / 0.04 = <span class="fa-bold">€1,335,000</span>
+
+<span class="fa-section">── Monte Carlo result ──────────────────────────</span>
+  Success rate (30yr drawdown) <span class="fa-warning">61%</span>   ← at current savings rate
+  Success rate at €1,200/mo    <span class="fa-good">84%</span>
+  Success rate at €1,600/mo    <span class="fa-good">94%</span></div>
+          </div>
+
+          <p><span class="inline-pill pill-yellow">61% success</span> At €850/month contributions, the median scenario falls short of your FIRE number by roughly €623k. To hit 90%+ success you'd need contributions around €1,600/month.</p>
+
+          <div class="progress-wrap">
+            <div class="progress-label"><span>FIRE progress (current path)</span><span>19.5% → target €1.34M</span></div>
+            <div class="progress-bar"><div class="progress-fill accent" style="width:19.5%"></div></div>
+          </div>
+
+          <p>Want to see what changes if you: (a) increase contributions, (b) push retirement to 55, or (c) reduce target expenses?</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Scenario 4: Bank import ────────────────────────────────────────── -->
+  <div class="scenario" id="s-import">
+    <div class="conversation">
+      <div class="msg">
+        <div class="msg-header assistant"><div class="avatar assistant">FA</div> Finance Assistant — session start</div>
+        <div class="msg-body">
+          <div class="terminal">
+            <div class="terminal-body"><span class="fa-warning">[~]</span> <span class="fa-bold">1 file waiting in inbox</span> — DKB_May2026.csv · 87 transactions ready to import
+   → Say 'show inbox' to preview and import.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="msg">
+        <div class="msg-header user"><div class="avatar user">U</div> You</div>
+        <div class="msg-body"><p>show inbox</p></div>
+      </div>
+
+      <div class="msg">
+        <div class="msg-header assistant"><div class="avatar assistant">FA</div> Finance Assistant</div>
+        <div class="msg-body">
+          <div class="terminal">
+            <div class="terminal-bar">
+              <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+              <span class="terminal-label">~/.finance/inbox/</span>
+            </div>
+            <div class="terminal-body"><span class="fa-bold">Inbox: 1 pending file</span>
+
+• <span class="fa-bold">DKB_May2026.csv</span> — 87 transactions (csv · 2026-05-01 → 2026-05-22)
+  → Say 'import DKB_May2026.csv' to add to your account.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="msg">
+        <div class="msg-header user"><div class="avatar user">U</div> You</div>
+        <div class="msg-body"><p>import it into my DKB account</p></div>
+      </div>
+
+      <div class="msg">
+        <div class="msg-header assistant"><div class="avatar assistant">FA</div> Finance Assistant</div>
+        <div class="msg-body">
+          <div class="terminal">
+            <div class="terminal-body"><span class="fa-good">✓ Import complete: DKB_May2026.csv</span>
+
+  87 parsed · <span class="fa-good">74 new</span> · <span class="fa-muted">13 duplicates skipped</span>
+
+<span class="fa-section">── Top new categories ──────────────────────────</span>
+  Eating Out         12 transactions   €234.80
+  Groceries           9 transactions   €318.40
+  Transport           7 transactions   €112.60
+  Subscriptions       4 transactions    €89.90
+  Other              42 transactions   €621.40
+
+<span class="fa-bold">May running total:</span> €1,377.10 expenses  ·  €4,833.33 income
+<span class="fa-warning">Eating Out is at 89% of your €200 budget with 12 days left.</span></div>
+          </div>
+          <p>74 new transactions categorized. The Eating Out alert fired immediately — you're close to your monthly limit. Want me to show the full budget status?</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end demo-area -->
+
+<footer>
+  <p>Finance Assistant is <a href="https://github.com/googlarz/finance-assistant">open source</a> and free forever. All data stays on your machine.<br>
+  Works with <a href="https://claude.ai">Claude.ai Projects</a>, <a href="https://claude.ai/download">Claude Code</a>, and <a href="https://github.com/anthropics/claude-code">Claude Cowork</a>.</p>
+</footer>
+
+<script>
+  function show(id) {
+    document.querySelectorAll('.scenario').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('s-' + id).classList.add('active');
+    event.target.classList.add('active');
+  }
+</script>
+</body>
+</html>

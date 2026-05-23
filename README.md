@@ -8,6 +8,8 @@ The privacy of a local app. Open source. Free forever.
 `6 locales` · `13 bank formats` · `7 financial domains` · `Monte Carlo FIRE`
 **claude.ai Projects** · **Claude Code** · **Claude Cowork**
 
+**[→ Live demo](https://googlarz.github.io/finance-assistant/)** — see a real session without installing
+
 ---
 
 Most people have a vague relationship with their finances. A rough sense of what they earn, a guess at what they owe in taxes, a hope that retirement will work out. Every tool that could help wants a monthly subscription and access to your bank account.
