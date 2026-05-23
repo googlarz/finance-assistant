@@ -207,6 +207,75 @@ def _setup_watcher() -> None:
         print("Plist is ready; activate with: launchctl load", plist_path)
 
 
+def _setup_digest() -> None:
+    """Install a launchd StartCalendarInterval plist for weekly digest delivery."""
+    import pathlib
+    import subprocess
+
+    skill_path = pathlib.Path(__file__).resolve()
+    label = "com.financeassistant.weekly-digest"
+    plist_path = pathlib.Path.home() / "Library" / "LaunchAgents" / f"{label}.plist"
+
+    # Sunday 09:00 weekly
+    plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{label}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{sys.executable}</string>
+        <string>{skill_path}</string>
+        <string>--digest</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>0</integer>
+        <key>Hour</key>
+        <integer>9</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>{pathlib.Path.home()}/.finance/digest.log</string>
+    <key>StandardErrorPath</key>
+    <string>{pathlib.Path.home()}/.finance/digest-error.log</string>
+</dict>
+</plist>"""
+
+    print("Weekly digest plist (fires Sunday 09:00):")
+    print("─" * 60)
+    print(plist_content)
+    print("─" * 60)
+    print(f"\nWill install to: {plist_path}")
+    print("\nProceed? [y/N] ", end="", flush=True)
+
+    try:
+        response = input().strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print("\nAborted.")
+        return
+    if response != "y":
+        print("Aborted.")
+        return
+
+    plist_path.parent.mkdir(parents=True, exist_ok=True)
+    plist_path.write_text(plist_content)
+    print(f"\n✓ Plist written to {plist_path}")
+
+    try:
+        subprocess.run(["launchctl", "load", str(plist_path)], check=True)
+        print("✓ Weekly digest scheduled (Sundays 09:00).")
+        print("  Run `python3 skill.py --digest` now to test it.")
+    except subprocess.CalledProcessError as exc:
+        print(f"⚠  launchctl load failed: {exc}")
+    except FileNotFoundError:
+        print("(launchctl not found — are you on macOS?)")
+
+
 def _setup_ambient_context() -> None:
     """Install a PreCompact hook that injects a compact financial snapshot."""
     import json
@@ -298,6 +367,17 @@ if __name__ == "__main__":
         n = clear_suppression(domain)
         label = f" for domain '{domain}'" if domain else ""
         print(f"Cleared {n} suppressed condition(s){label}.")
+        sys.exit(0)
+
+    if "--digest" in sys.argv:
+        _setup_db()
+        profile = get_profile() or {}
+        from weekly_digest import run_digest
+        run_digest(profile, notify=True, verbose=True)
+        sys.exit(0)
+
+    if "--setup-digest" in sys.argv:
+        _setup_digest()
         sys.exit(0)
 
     if "--ambient-snapshot" in sys.argv:
