@@ -115,6 +115,22 @@ Finance Assistant is **built for Claude Code**. A claude.ai Projects template sh
 
 **Translation:** If you're on claude.ai web or mobile, you get a knowledgeable finance advisor that reasons over what you tell it in the chat. If you want it to read your bank statements, watch a folder, run scheduled digests, or hold a real database of your transactions, you need [Claude Code](https://claude.com/product/claude-code) (free CLI, runs locally).
 
+### 100% private (zero data to Anthropic)
+
+By default Claude Code sends your prompts and file context to Anthropic's API. The **data on disk** never leaves your machine, but the **conversation** does. If you want truly zero-egress operation, route Claude Code through a local model with [`claude-code-router`](https://github.com/musistudio/claude-code-router) and point it at [Ollama](https://ollama.com) running locally:
+
+```bash
+# 1. Install Ollama and pull a capable model
+ollama pull llama3.3:70b      # or qwen2.5-coder:32b, deepseek-r1, etc.
+
+# 2. Install claude-code-router
+npm install -g @musistudio/claude-code-router
+
+# 3. Configure it to route to your local Ollama (see router README)
+```
+
+**Honest tradeoff:** open local models are meaningfully weaker than Claude on multi-step tax reasoning, bracket math, and "explain why" answers. You will get less precise tax calculations and worse advice quality. Use this mode if data sovereignty matters more than answer quality — e.g. when working with confidential client data or during the EU sovereignty audit at your job. For your own personal finances, the privacy gain over the standard local-first model (your data never leaves your machine; only the conversation does) is usually not worth the quality drop.
+
 ---
 
 ## Quick Start

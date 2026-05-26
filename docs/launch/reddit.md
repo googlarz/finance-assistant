@@ -34,6 +34,8 @@ Repo: https://github.com/googlarz/finance-assistant
 
 **To use the full thing you need [Claude Code](https://claude.com/product/claude-code) installed** — file system access is required for CSV import, local SQLite, and scheduled digests. There's a claude.ai Projects template if you only want conversational use, but it can't read your statements.
 
+For privacy maximalists: you can route Claude Code through [claude-code-router](https://github.com/musistudio/claude-code-router) + a local [Ollama](https://ollama.com) model so no prompts leave your machine. Answer quality drops though — open local models aren't as sharp on tax brackets and SE calculations.
+
 Not affiliated with Anthropic — just a tool I built for myself. Happy to answer questions about the FIRE math, the tax engines, or the architecture.
 
 ---

@@ -23,6 +23,8 @@ Hard limits I deliberately kept:
 - macOS for the launchd-scheduled bits (inbox watcher, weekly digest); the rest is plain Python and works anywhere.
 - **It's a Claude Code skill — full features need [Claude Code](https://claude.com/product/claude-code) installed.** There's a claude.ai Projects template too, but the browser can't reach your files, so it's conversational only (no CSV import, no SQLite, no scheduled jobs). README has a feature matrix.
 
+If you want zero data leaving your machine (not even prompts to Anthropic), you can route Claude Code through [claude-code-router](https://github.com/musistudio/claude-code-router) + [Ollama](https://ollama.com). Honest tradeoff: open local models are noticeably weaker at multi-step tax reasoning, so answer quality drops. README explains when this is worth it.
+
 Live demo (no install): https://googlarz.github.io/finance-assistant/
 Repo: https://github.com/googlarz/finance-assistant
 
