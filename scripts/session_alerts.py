@@ -574,6 +574,50 @@ def get_session_alerts(profile: Optional[dict] = None) -> list[dict]:
 
     all_alerts.extend(_data_coach_alerts(profile))
 
+    # Debt strategy — if user has ≥2 debts, flag savings from avalanche
+    try:
+        from debt_optimizer import get_debts, compare_payoff_strategies
+        debts = get_debts()
+        if len(debts) >= 2:
+            cmp = compare_payoff_strategies(extra_monthly=0.0)
+            interest_saved = cmp["comparison"]["interest_saved_by_avalanche"]
+            months_saved = cmp["comparison"]["months_saved_by_avalanche"]
+            if interest_saved >= 100:
+                all_alerts.append(_alert(
+                    "info",
+                    "debt",
+                    f"Switching to avalanche could save €{interest_saved:,.0f} in interest",
+                    f"And get you debt-free {months_saved} month(s) sooner across {len(debts)} debts.",
+                    "Say 'compare debt strategies' for the full breakdown.",
+                ))
+    except Exception:
+        pass  # Debt strategy must never crash the session
+
+    # Recurring subscriptions — flag total monthly burden + duplicates
+    try:
+        from subscription_detector import get_for_account, summarize
+        subs = get_for_account(account_id="default")
+        s = summarize(subs)
+        if s["duplicate_count"]:
+            all_alerts.append(_alert(
+                "warning",
+                "subscriptions",
+                f"{s['duplicate_count']} possible duplicate subscription{'s' if s['duplicate_count'] != 1 else ''}",
+                "Same merchant charging you multiple times each month — likely double-billed.",
+                "Say 'show subscriptions' to review and cancel duplicates.",
+            ))
+        elif s["active_count"] >= 5 and s["total_monthly"] >= 50:
+            all_alerts.append(_alert(
+                "info",
+                "subscriptions",
+                f"{s['active_count']} active subscriptions — €{s['total_monthly']:,.0f}/mo "
+                f"(€{s['total_yearly']:,.0f}/yr)",
+                f"That's about {s['total_yearly']:.0f}/yr in recurring charges.",
+                "Say 'show subscriptions' to review.",
+            ))
+    except Exception:
+        pass  # Subscription detection must never crash the session
+
     # Stale portfolio prices nudge
     try:
         from price_sync import get_stale_holding_count
