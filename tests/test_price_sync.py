@@ -178,6 +178,67 @@ def test_sync_prices_force_bypasses_ttl(isolated_finance_dir):
 # format_sync_result
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Crypto fetching via CoinGecko (G9)
+# ---------------------------------------------------------------------------
+
+def _make_coingecko_response(coin_id: str, price: float, vs: str = "eur") -> MagicMock:
+    payload = {coin_id: {vs: price}}
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = json.dumps(payload).encode()
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    return mock_resp
+
+
+def test_fetch_price_routes_crypto_to_coingecko(isolated_finance_dir):
+    mock_resp = _make_coingecko_response("bitcoin", 50000.0, "eur")
+    with patch("urllib.request.urlopen", return_value=mock_resp) as mock_open:
+        price, currency = fetch_price("BTC", asset_class="crypto", vs_currency="EUR")
+    assert price == 50000.0
+    assert currency == "EUR"
+    # Confirm CoinGecko URL was used (not Yahoo)
+    called_url = mock_open.call_args[0][0].get_full_url()
+    assert "coingecko" in called_url
+    assert "bitcoin" in called_url
+
+
+def test_fetch_price_uses_explicit_coingecko_id(isolated_finance_dir):
+    mock_resp = _make_coingecko_response("uniswap", 8.50, "eur")
+    with patch("urllib.request.urlopen", return_value=mock_resp) as mock_open:
+        price, currency = fetch_price(
+            "UNI", asset_class="crypto", coingecko_id="uniswap", vs_currency="EUR"
+        )
+    assert price == 8.50
+    assert "uniswap" in mock_open.call_args[0][0].get_full_url()
+
+
+def test_sync_prices_handles_crypto_holding(isolated_finance_dir):
+    portfolio = _make_portfolio([{
+        "id": "btc1",
+        "symbol": "BTC",
+        "type": "crypto",
+        "asset_class": "crypto",
+        "units": 0.5,
+        "current_value": 0,
+        "currency": "EUR",
+    }])
+    mock_resp = _make_coingecko_response("bitcoin", 50000.0, "eur")
+    with patch("price_sync._load_portfolio", return_value=portfolio), \
+         patch("price_sync._save_portfolio") as mock_save, \
+         patch("urllib.request.urlopen", return_value=mock_resp):
+        result = sync_prices()
+
+    assert "BTC" in result["updated"]
+    saved = mock_save.call_args[0][0]
+    assert saved["holdings"][0]["current_value"] == 25000.0  # 0.5 * 50000
+    assert saved["holdings"][0]["price_source"] == "coingecko"
+
+
+# ---------------------------------------------------------------------------
+# format_sync_result
+# ---------------------------------------------------------------------------
+
 def test_format_sync_result_contains_summary():
     result = {
         "updated": ["VWCE", "AAPL"],

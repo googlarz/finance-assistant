@@ -23,12 +23,69 @@ _TTL_SECONDS = 6 * 3600
 
 _YAHOO_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=1d"
 
+# CoinGecko public API — free for personal use, no key required at low rates.
+# Slugs are CoinGecko's IDs, not ticker symbols. Common tickers mapped below;
+# users can also set the holding's `coingecko_id` field directly.
+_COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies={vs}"
 
-def fetch_price(symbol: str) -> tuple[float | None, str]:
-    """Fetch the latest market price for *symbol* from Yahoo Finance.
+_COMMON_CRYPTO_IDS = {
+    "BTC": "bitcoin",
+    "ETH": "ethereum",
+    "SOL": "solana",
+    "USDC": "usd-coin",
+    "USDT": "tether",
+    "ADA": "cardano",
+    "DOT": "polkadot",
+    "MATIC": "polygon",
+    "AVAX": "avalanche-2",
+    "XRP": "ripple",
+    "DOGE": "dogecoin",
+    "LINK": "chainlink",
+    "LTC": "litecoin",
+    "BCH": "bitcoin-cash",
+    "ATOM": "cosmos",
+    "ALGO": "algorand",
+}
+
+
+def _fetch_coingecko(coingecko_id: str, vs_currency: str = "eur") -> tuple[float | None, str]:
+    """Fetch a crypto price from CoinGecko.
+
+    Returns (price, currency_upper) on success, or (None, "") on failure.
+    """
+    url = _COINGECKO_URL.format(ids=coingecko_id, vs=vs_currency.lower())
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())
+        price = float(data[coingecko_id][vs_currency.lower()])
+        return price, vs_currency.upper()
+    except Exception:
+        return None, ""
+
+
+def fetch_price(
+    symbol: str,
+    *,
+    asset_class: str = "stock",
+    coingecko_id: str | None = None,
+    vs_currency: str = "EUR",
+) -> tuple[float | None, str]:
+    """Fetch the latest market price for *symbol*.
+
+    Routes crypto to CoinGecko, everything else to Yahoo Finance. Yahoo also
+    supports crypto via `BTC-EUR`-style symbols, but CoinGecko is more reliable
+    for less-common coins.
 
     Returns (price, currency) on success, or (None, "") on failure.
     """
+    if asset_class == "crypto":
+        cg_id = coingecko_id or _COMMON_CRYPTO_IDS.get(symbol.upper())
+        if cg_id:
+            return _fetch_coingecko(cg_id, vs_currency)
+        # Fall back to Yahoo's BTC-EUR format
+        symbol = f"{symbol.upper()}-{vs_currency.upper()}"
+
     url = _YAHOO_URL.format(symbol=symbol)
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
@@ -93,7 +150,17 @@ def sync_prices(force: bool = False) -> dict:
                 except ValueError:
                     pass  # Bad timestamp — treat as stale and re-fetch
 
-        price, currency = fetch_price(symbol)
+        asset_class = holding.get("asset_class") or (
+            "crypto" if asset_type == "crypto" else "stock"
+        )
+        coingecko_id = holding.get("coingecko_id")
+        vs_currency = holding.get("currency") or "EUR"
+        price, currency = fetch_price(
+            symbol,
+            asset_class=asset_class,
+            coingecko_id=coingecko_id,
+            vs_currency=vs_currency,
+        )
 
         if price is None:
             failed.append(symbol)
@@ -104,7 +171,7 @@ def sync_prices(force: bool = False) -> dict:
         new_value = units * price
 
         holding["current_value"] = new_value
-        holding["price_source"] = "yahoo"
+        holding["price_source"] = "coingecko" if asset_class == "crypto" else "yahoo"
         holding["price_fetched_at"] = now.isoformat()
         if currency:
             holding["currency"] = currency

@@ -51,11 +51,16 @@ def get_portfolio() -> dict:
 
 def add_holding(holding_data: dict) -> dict:
     portfolio = _load_portfolio()
+    asset_type = holding_data.get("type", "other")
     holding = {
-        "id": holding_data.get("id") or str(uuid.uuid4())[:8],
+        "id": holding_data.get("id") or str(uuid.uuid4()),
         "symbol": holding_data.get("symbol", ""),
         "name": holding_data.get("name", ""),
-        "type": holding_data.get("type", "other"),
+        "type": asset_type,
+        # asset_class is the pricing-source hint; defaults from asset type
+        "asset_class": holding_data.get("asset_class") or (
+            "crypto" if asset_type == "crypto" else "stock"
+        ),
         "units": float(holding_data.get("units", 0)),
         "cost_basis": float(holding_data.get("cost_basis", 0)),
         "current_value": float(holding_data.get("current_value", 0)),
@@ -63,6 +68,9 @@ def add_holding(holding_data: dict) -> dict:
         "account_id": holding_data.get("account_id"),
         "last_updated": datetime.now().isoformat(),
     }
+    # Crypto-specific: optional explicit CoinGecko slug (BTC→bitcoin, etc.)
+    if asset_type == "crypto" and holding_data.get("coingecko_id"):
+        holding["coingecko_id"] = holding_data["coingecko_id"]
     portfolio["holdings"].append(holding)
     _save_portfolio(portfolio)
     return holding
