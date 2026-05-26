@@ -17,7 +17,7 @@ from onboarding import (
     get_resume_message, get_completion_message, get_onboarding_state,
 )
 
-__version__ = "3.6.0"
+__version__ = "3.7.1"
 
 _timeline_ctx: dict = {}
 
@@ -98,6 +98,10 @@ def main() -> str:
             "debt, taxes, the works.\n\n"
             "I keep a private profile with just the essentials — no raw documents, no account "
             "numbers. You can delete everything with one command any time.\n\n"
+            "**Want to see what this looks like with sample data first?** Say 'show demo' "
+            "and I'll generate a complete sandbox profile with budgets, transactions, "
+            "investments, and tax scenarios you can poke at before committing real numbers. "
+            "(Demo data is wiped when you start the real onboarding.)\n\n"
             + get_step_prompt("basics")
         )
 
@@ -216,16 +220,35 @@ def _setup_watcher() -> None:
         print("Plist is ready; activate with: launchctl load", plist_path)
 
 
-def _setup_digest() -> None:
-    """Install a launchd StartCalendarInterval plist for weekly digest delivery."""
+def _setup_digest(weekday: int = 0, hour: int = 9, minute: int = 0) -> None:
+    """Install a launchd StartCalendarInterval plist for weekly digest delivery.
+
+    Args:
+        weekday: 0=Sunday, 1=Monday, ..., 6=Saturday (launchd convention)
+        hour:    0-23
+        minute:  0-59
+    """
     import pathlib
     import subprocess
+
+    # Validate inputs — guard against accidental config corruption
+    if not (0 <= weekday <= 6):
+        print(f"Invalid weekday {weekday} (must be 0=Sunday..6=Saturday)", file=sys.stderr)
+        return
+    if not (0 <= hour <= 23):
+        print(f"Invalid hour {hour} (must be 0-23)", file=sys.stderr)
+        return
+    if not (0 <= minute <= 59):
+        print(f"Invalid minute {minute} (must be 0-59)", file=sys.stderr)
+        return
+
+    weekday_names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    day_label = weekday_names[weekday]
 
     skill_path = pathlib.Path(__file__).resolve()
     label = "com.financeassistant.weekly-digest"
     plist_path = pathlib.Path.home() / "Library" / "LaunchAgents" / f"{label}.plist"
 
-    # Sunday 09:00 weekly
     plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
     "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -242,11 +265,11 @@ def _setup_digest() -> None:
     <key>StartCalendarInterval</key>
     <dict>
         <key>Weekday</key>
-        <integer>0</integer>
+        <integer>{weekday}</integer>
         <key>Hour</key>
-        <integer>9</integer>
+        <integer>{hour}</integer>
         <key>Minute</key>
-        <integer>0</integer>
+        <integer>{minute}</integer>
     </dict>
     <key>StandardOutPath</key>
     <string>{pathlib.Path.home()}/.finance/digest.log</string>
@@ -255,7 +278,7 @@ def _setup_digest() -> None:
 </dict>
 </plist>"""
 
-    print("Weekly digest plist (fires Sunday 09:00):")
+    print(f"Weekly digest plist (fires {day_label} {hour:02d}:{minute:02d}):")
     print("─" * 60)
     print(plist_content)
     print("─" * 60)
@@ -355,6 +378,51 @@ if __name__ == "__main__":
         _setup_ambient_context()
         sys.exit(0)
 
+    if "--backup" in sys.argv:
+        from backup import cli_backup
+        cli_backup(sys.argv)
+        sys.exit(0)
+
+    if "--backup-restore" in sys.argv:
+        from backup import cli_restore
+        cli_restore(sys.argv)
+        sys.exit(0)
+
+    if "--debt-strategy" in sys.argv:
+        _setup_db()
+        from debt_optimizer import compare_payoff_strategies, format_debt_display
+        extra = 0.0
+        for i, arg in enumerate(sys.argv):
+            if arg == "--extra" and i + 1 < len(sys.argv):
+                try:
+                    extra = float(sys.argv[i + 1])
+                except ValueError:
+                    pass
+        print(format_debt_display())
+        cmp = compare_payoff_strategies(extra_monthly=extra)
+        c = cmp["comparison"]
+        a = cmp["avalanche"]
+        s = cmp["snowball"]
+        print("\nStrategy comparison")
+        print(f"  Avalanche : {a['months']} months  |  €{a['total_interest']:,.2f} interest")
+        print(f"  Snowball  : {s['months']} months  |  €{s['total_interest']:,.2f} interest")
+        print(f"  Avalanche saves €{c['interest_saved_by_avalanche']:,.2f} "
+              f"and {c['months_saved_by_avalanche']} month(s)")
+        print(f"  Recommendation: {c['recommendation']}")
+        sys.exit(0)
+
+    if "--subscriptions" in sys.argv:
+        _setup_db()
+        from subscription_detector import get_for_account, format_subscriptions
+        subs = get_for_account(account_id="default")
+        print(format_subscriptions(subs))
+        sys.exit(0)
+
+    if "--audit" in sys.argv:
+        from audit_log import cli_show
+        cli_show(sys.argv)
+        sys.exit(0)
+
     if "--alert-stats" in sys.argv:
         from alert_telemetry import format_alert_stats
         days = 30
@@ -386,7 +454,23 @@ if __name__ == "__main__":
         sys.exit(0)
 
     if "--setup-digest" in sys.argv:
-        _setup_digest()
+        # Defaults: Sunday 09:00. Override with --day [0-6] and --time HH:MM.
+        weekday, hour, minute = 0, 9, 0
+        for i, arg in enumerate(sys.argv):
+            if arg == "--day" and i + 1 < len(sys.argv):
+                try:
+                    weekday = int(sys.argv[i + 1])
+                except ValueError:
+                    pass
+            elif arg == "--time" and i + 1 < len(sys.argv):
+                t = sys.argv[i + 1]
+                try:
+                    parts = t.split(":")
+                    hour = int(parts[0])
+                    minute = int(parts[1]) if len(parts) > 1 else 0
+                except (ValueError, IndexError):
+                    pass
+        _setup_digest(weekday=weekday, hour=hour, minute=minute)
         sys.exit(0)
 
     if "--ambient-snapshot" in sys.argv:
@@ -399,15 +483,37 @@ if __name__ == "__main__":
                 print(snapshot)
         sys.exit(0)
 
-    if "--demo" in sys.argv:
+    if "--demo" in sys.argv or "--show-demo" in sys.argv:
         from scripts.demo_data import seed_demo_data
         from workspace_builder import generate_html_dashboard
         _setup_db()
-        seed_demo_data()
+        seeded = seed_demo_data()
         path = os.path.expanduser("~/.finance/dashboard_demo.html")
         os.makedirs(os.path.dirname(path), exist_ok=True)
         generate_html_dashboard(output_path=path)
+        if seeded:
+            print("Demo data seeded — sample profile, accounts, transactions, goals, debts, holdings.")
+        else:
+            print("Demo data already present (skipped reseeding).")
         print(f"Demo dashboard: {path}")
+        print("\nWhen you're ready for the real thing, say 'wipe demo and start over'.")
+        sys.exit(0)
+
+    if "--wipe-demo" in sys.argv:
+        # Removes ONLY demo-marked entities (DKB Demo account + linked txns).
+        # Real user data is untouched.
+        _setup_db()
+        try:
+            from account_manager import list_accounts, delete_account
+            removed = 0
+            for acc in list_accounts():
+                if acc.get("name") == "DKB Demo" or acc.get("id", "").endswith("-demo"):
+                    delete_account(acc["id"])
+                    removed += 1
+            print(f"Removed {removed} demo account(s) and their data.")
+        except Exception as exc:
+            print(f"Demo wipe failed: {exc}", file=sys.stderr)
+            sys.exit(1)
         sys.exit(0)
 
     if "--dashboard" in sys.argv:
