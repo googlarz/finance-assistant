@@ -266,6 +266,18 @@ def update_profile(updates: dict) -> dict:
     profile["meta"]["last_updated"] = datetime.now().isoformat()
     merged = deep_merge(profile, updates)
     _save_raw(merged)
+
+    try:
+        from audit_log import log_mutation
+        # Log only the keys that changed at top level — full profile is too large.
+        log_mutation(
+            action="update",
+            target="profile",
+            metadata={"keys_updated": sorted(updates.keys())},
+        )
+    except Exception:
+        pass
+
     return merged
 
 

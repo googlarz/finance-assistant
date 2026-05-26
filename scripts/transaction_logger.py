@@ -252,6 +252,25 @@ def add_transaction(
     transactions.sort(key=lambda t: t.get("date", ""))
     _save_transactions(account_id, year, transactions)
 
+    # Audit log — best-effort, must never block
+    try:
+        from audit_log import log_mutation
+        log_mutation(
+            action="create",
+            target="transaction",
+            target_id=txn["id"],
+            after={
+                "date": txn["date"],
+                "amount": txn["amount"],
+                "category": txn.get("category"),
+                "description": (txn.get("description") or "")[:80],
+                "account_id": txn["account_id"],
+            },
+            source=txn.get("import_source", "manual"),
+        )
+    except Exception:
+        pass
+
     return {
         "transaction_added": txn,
         "display": _format_transaction_added(txn),
