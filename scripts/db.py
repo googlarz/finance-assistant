@@ -9,10 +9,10 @@ import sqlite3
 from pathlib import Path
 from contextlib import contextmanager
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2  # bumped: added transactions.type column
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS schema_version (version INTEGER);
+CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY);
 
 CREATE TABLE IF NOT EXISTS profile (
     key TEXT PRIMARY KEY,
@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     account_id TEXT NOT NULL,
     date TEXT NOT NULL,
     amount REAL NOT NULL,
+    type TEXT DEFAULT 'expense',  -- income|expense|transfer|investment|debt_payment
     currency TEXT NOT NULL,
     category TEXT,
     description TEXT,
@@ -144,6 +145,7 @@ CREATE TABLE IF NOT EXISTS insurance_policies (
 CREATE INDEX IF NOT EXISTS idx_transactions_account ON transactions(account_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category);
+CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
 CREATE INDEX IF NOT EXISTS idx_budget_month ON budget_categories(month);
 CREATE INDEX IF NOT EXISTS idx_snapshots_type_date ON snapshots(type, date);
 """
@@ -174,14 +176,56 @@ def get_conn():
         conn.close()
 
 
+def _current_schema_version(conn) -> int:
+    """Read the current schema version from the schema_version table.
+
+    Returns 0 if the table doesn't exist or has no row.
+    """
+    try:
+        row = conn.execute(
+            "SELECT MAX(version) FROM schema_version"
+        ).fetchone()
+        if row and row[0] is not None:
+            return int(row[0])
+    except Exception:
+        return 0
+    return 0
+
+
+def _migrate_schema(conn, from_version: int) -> None:
+    """Apply incremental schema migrations from `from_version` to current."""
+    # v1 → v2: add transactions.type column (was derived from amount sign)
+    if from_version < 2:
+        try:
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(transactions)").fetchall()}
+            if "type" not in cols:
+                conn.execute("ALTER TABLE transactions ADD COLUMN type TEXT DEFAULT 'expense'")
+                # Backfill from amount sign — best-effort heuristic
+                conn.execute(
+                    "UPDATE transactions SET type = CASE WHEN amount >= 0 THEN 'income' ELSE 'expense' END "
+                    "WHERE type IS NULL OR type = 'expense'"
+                )
+        except Exception:
+            pass  # ALTER is idempotent enough; CREATE TABLE IF NOT EXISTS handles fresh installs
+
+
 def init_db() -> None:
-    """Create schema if not exists."""
+    """Create schema if not exists, apply migrations, stamp version."""
     with get_conn() as conn:
+        # CREATE TABLE IF NOT EXISTS for everything — safe on existing DBs
         conn.executescript(SCHEMA)
+        # Then apply column-level migrations for existing DBs that pre-date a change
+        from_version = _current_schema_version(conn)
+        if from_version < SCHEMA_VERSION:
+            _migrate_schema(conn, from_version)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_version (version) VALUES (?)",
+                (SCHEMA_VERSION,),
+            )
 
 
 def is_initialized() -> bool:
-    """True if the DB file exists and has tables."""
+    """True if the DB file exists, has tables, and schema_version is current."""
     path = get_db_path()
     if not path.exists():
         return False

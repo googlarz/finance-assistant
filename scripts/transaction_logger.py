@@ -8,6 +8,7 @@ Transactions are stored per-account per-year in .finance/accounts/transactions/.
 from __future__ import annotations
 
 import re
+import sys
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -18,24 +19,24 @@ try:
     )
     from currency import format_money
 except ImportError:
-    import os, sys
-    sys.path.insert(0, os.path.dirname(__file__))
+    import os, sys as _sys
+    _sys.path.insert(0, os.path.dirname(__file__))
     from finance_storage import get_transactions_path, load_json, save_json
     from currency import format_money
 
 
-_DB_AVAILABLE: Optional[bool] = None
-
-
 def _db_available() -> bool:
-    global _DB_AVAILABLE
-    if _DB_AVAILABLE is None:
-        try:
-            from db import is_initialized
-            _DB_AVAILABLE = is_initialized()
-        except Exception:
-            _DB_AVAILABLE = False
-    return _DB_AVAILABLE
+    """Check DB availability fresh each call.
+
+    Previously this was cached for the session; if the cache was warmed before
+    init_db() ran (e.g. a preview happened before _setup_db), SQLite was
+    silently disabled for the rest of the session. is_initialized() is cheap.
+    """
+    try:
+        from db import is_initialized
+        return is_initialized()
+    except Exception:
+        return False
 
 
 # ── Category definitions ─────────────────────────────────────────────────────
@@ -189,7 +190,7 @@ def add_transaction(
 
     txn = dict(TRANSACTION_SCHEMA)
     txn.update({
-        "id": str(uuid.uuid4())[:8],
+        "id": str(uuid.uuid4()),  # full UUID — 8-char prefix had ~1.15% collision rate at 10k txns
         "date": date,
         "account_id": account_id,
         "type": type,
@@ -200,31 +201,51 @@ def add_transaction(
     })
     txn.update(kwargs)
 
-    # Dual-write: SQLite first, then JSON backup
+    # Dual-write: SQLite first, then JSON backup.
+    # Use INSERT (not INSERT OR IGNORE) with explicit IntegrityError handling so
+    # collisions cause an ID regeneration rather than silent data loss.
     if _db_available():
+        import sqlite3
+        from db import get_conn
         try:
-            from db import get_conn
-            with get_conn() as conn:
-                conn.execute(
-                    """INSERT OR IGNORE INTO transactions
-                       (id, account_id, date, amount, currency,
-                        category, description, source, payee, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        txn["id"],
-                        txn["account_id"],
-                        txn["date"],
-                        txn["amount"],
-                        txn["currency"],
-                        txn.get("category"),
-                        txn.get("description"),
-                        txn.get("import_source", "manual"),
-                        txn.get("payee"),
-                        datetime.now().isoformat(),
-                    ),
-                )
-        except Exception:
-            pass  # SQLite write failure must not block JSON write
+            for attempt in range(2):
+                try:
+                    with get_conn() as conn:
+                        conn.execute(
+                            """INSERT INTO transactions
+                               (id, account_id, date, amount, type, currency,
+                                category, description, source, payee, created_at)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (
+                                txn["id"],
+                                txn["account_id"],
+                                txn["date"],
+                                txn["amount"],
+                                txn.get("type", "expense"),
+                                txn["currency"],
+                                txn.get("category"),
+                                txn.get("description"),
+                                txn.get("import_source", "manual"),
+                                txn.get("payee"),
+                                datetime.now().isoformat(),
+                            ),
+                        )
+                    break  # success
+                except sqlite3.IntegrityError:
+                    # ID collision — regenerate once. A second collision against a
+                    # fresh full UUID is statistically impossible; if it happens,
+                    # surface it rather than swallowing the transaction.
+                    if attempt == 0:
+                        txn["id"] = str(uuid.uuid4())
+                        continue
+                    raise
+        except Exception as exc:
+            # SQLite write failure must not block JSON write, but DO surface it
+            # so users learn about a degraded storage layer.
+            print(
+                f"[finance_assistant] SQLite write failed: {exc}",
+                file=sys.stderr,
+            )
 
     transactions = _load_transactions(account_id, year)
     transactions.append(txn)
@@ -258,22 +279,23 @@ def get_transactions(
             if category:
                 clauses.append("category = ?")
                 params.append(category)
+            if type:
+                # Type is stored as a column since schema v2; matches JSON path semantics
+                # (transfer, investment, debt_payment work consistently across backends).
+                clauses.append("type = ?")
+                params.append(type)
             where = " AND ".join(clauses)
             with get_conn() as conn:
                 rows = conn.execute(
                     f"SELECT * FROM transactions WHERE {where} ORDER BY date",
                     params,
                 ).fetchall()
-            txns = [dict(r) for r in rows]
-            if type:
-                # 'type' is not stored in DB; derive from amount sign
-                if type == "income":
-                    txns = [t for t in txns if float(t.get("amount", 0)) >= 0]
-                elif type == "expense":
-                    txns = [t for t in txns if float(t.get("amount", 0)) < 0]
-            return txns
-        except Exception:
-            pass  # fall through to JSON
+            return [dict(r) for r in rows]
+        except Exception as exc:
+            print(
+                f"[finance_assistant] SQLite read failed, falling back to JSON: {exc}",
+                file=sys.stderr,
+            )
 
     txns = _load_transactions(account_id, year)
     if month:
@@ -390,8 +412,11 @@ def deduplicate(new_transactions: list[dict], existing_transactions: list[dict])
                         if not exists:
                             unique.append(t)
             return unique
-        except Exception:
-            pass  # fall through to in-memory dedup
+        except Exception as exc:
+            print(
+                f"[finance_assistant] SQLite dedup failed, using in-memory fallback: {exc}",
+                file=sys.stderr,
+            )
 
     existing_keys = set()
     for t in existing_transactions:

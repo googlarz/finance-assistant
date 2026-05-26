@@ -33,11 +33,20 @@ def _setup_db() -> None:
         if not is_initialized():
             init_db()
             finance_dir = get_finance_dir()
-            migrate_all(finance_dir)
+            result = migrate_all(finance_dir)
+            errors = result.get("errors", []) if isinstance(result, dict) else []
+            if errors:
+                print(
+                    f"[Finance Assistant] Migration completed with {len(errors)} error(s):",
+                    file=sys.stderr,
+                )
+                for err in errors[:5]:
+                    print(f"  - {err}", file=sys.stderr)
+                if len(errors) > 5:
+                    print(f"  ... and {len(errors) - 5} more", file=sys.stderr)
         else:
             init_db()  # ensure schema is current (no-op if up to date)
     except Exception as exc:
-        import sys
         print(f"[Finance Assistant] Warning: DB bootstrap failed: {exc}", file=sys.stderr)
 
     # Load timeline context if there is enough history

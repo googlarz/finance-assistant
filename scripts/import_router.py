@@ -168,15 +168,25 @@ def import_file(
     from transaction_normalizer import normalize_transactions
     normalized = normalize_transactions(raw, account_id, fmt, currency)
 
-    # Deduplicate against existing
-    year = datetime.now().year
-    if normalized:
-        try:
-            first_date = normalized[0].get("date", "")
-            year = int(first_date[:4]) if first_date else year
-        except (ValueError, IndexError):
-            pass
-    existing = get_transactions(account_id=account_id, year=year)
+    # Deduplicate against existing.
+    # Bank exports commonly span year boundaries (December → January). Load
+    # every year that appears in the file so the in-memory dedup fallback
+    # doesn't silently miss the other side. SQLite dedup path loads from all
+    # years already; this matters when SQLite is unavailable.
+    years_in_file = set()
+    for txn in normalized:
+        date_str = txn.get("date", "")
+        if len(date_str) >= 4:
+            try:
+                years_in_file.add(int(date_str[:4]))
+            except ValueError:
+                continue
+    if not years_in_file:
+        years_in_file = {datetime.now().year}
+
+    existing: list = []
+    for yr in years_in_file:
+        existing.extend(get_transactions(account_id=account_id, year=yr))
     unique = deduplicate(normalized, existing)
 
     result = {

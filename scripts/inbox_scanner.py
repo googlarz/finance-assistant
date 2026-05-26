@@ -100,17 +100,27 @@ def _preview_file(file_path: Path) -> dict:
 
 
 def _do_import(file_path: Path, account_id: str = "") -> dict:
-    """Actually import a file (commit mode). Returns reconciliation numbers."""
+    """Actually import a file (commit mode). Returns reconciliation numbers.
+
+    Refuses to commit when no account is configured — previously fell back to
+    an `__unknown__` sentinel that polluted storage and made later re-imports
+    impossible. The inbox item stays at "pending" so it retries after the user
+    creates an account.
+    """
     try:
         from import_router import import_file
         if not account_id:
-            # Fall back to first available account
             try:
                 from account_manager import list_accounts
                 accounts = list_accounts()
-                account_id = accounts[0]["id"] if accounts else "__unknown__"
             except Exception:
-                account_id = "__unknown__"
+                accounts = []
+            if not accounts:
+                return {
+                    "success": False,
+                    "error": "No accounts configured. Create an account first (say 'add account').",
+                }
+            account_id = accounts[0]["id"]
         result = import_file(str(file_path), account_id=account_id, dry_run=False)
         return {
             "success": True,
@@ -187,7 +197,16 @@ def scan_inbox(commit: bool = False) -> dict:
 
         if commit and preview.get("importable"):
             result = _do_import(file_path)
-            entry["status"] = "imported" if result.get("success") else "error"
+            if result.get("success"):
+                entry["status"] = "imported"
+            else:
+                # Don't mark error if it's just "no accounts" — stay pending,
+                # retry on next scan after user creates an account.
+                err = result.get("error", "")
+                if "No accounts configured" in err:
+                    entry["status"] = "pending"
+                else:
+                    entry["status"] = "error"
             entry["import_result"] = result
 
         if key not in existing_ids:

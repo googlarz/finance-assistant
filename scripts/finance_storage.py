@@ -39,6 +39,31 @@ def _validate_column(col: str) -> str:
     return col
 
 
+# Path-segment safety: account_id and other user-supplied path components are
+# inserted into filenames. Reject anything that could escape the directory
+# (path separators, dots, control characters) or exceed reasonable length.
+_PATH_SEGMENT_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _validate_path_segment(value: str, kind: str = "segment") -> str:
+    """Validate a string that will be embedded in a filesystem path.
+
+    Rejects path traversal attempts (../, /, \\), control characters, and
+    anything outside a safe identifier alphabet. Raises ValueError if invalid.
+    """
+    if not isinstance(value, str) or not _PATH_SEGMENT_RE.match(value):
+        raise ValueError(
+            f"Invalid {kind}: {value!r} "
+            f"(must match {_PATH_SEGMENT_RE.pattern})"
+        )
+    return value
+
+
+# Public alias — other modules use this to sanitize user-supplied path segments
+# before passing them to storage functions or filenames.
+validate_path_segment = _validate_path_segment
+
+
 def get_project_dir() -> Path:
     project_dir = (
         os.environ.get("FINANCE_PROJECT_DIR")
@@ -87,6 +112,7 @@ def get_accounts_path() -> Path:
 
 
 def get_transactions_path(account_id: str, year: int) -> Path:
+    account_id = _validate_path_segment(account_id, kind="account_id")
     return ensure_subdir("accounts", "transactions") / f"{account_id}_{year}.json"
 
 
@@ -121,6 +147,7 @@ def get_debts_path() -> Path:
 
 
 def get_payoff_plan_path(plan_id: str) -> Path:
+    plan_id = _validate_path_segment(plan_id, kind="plan_id")
     return ensure_subdir("debt", "payoff_plans") / f"{plan_id}.json"
 
 
@@ -139,10 +166,12 @@ def get_net_worth_snapshot_path(date_str: str) -> Path:
 # ── Taxes ────────────────────────────────────────────────────────────────────
 
 def get_tax_path(locale: str, year: int) -> Path:
+    locale = _validate_path_segment(locale, kind="locale")
     return ensure_subdir("taxes", locale) / f"{year}.json"
 
 
 def get_tax_claims_path(locale: str, year: int) -> Path:
+    locale = _validate_path_segment(locale, kind="locale")
     return ensure_subdir("taxes", locale) / f"{year}-claims.json"
 
 
@@ -165,6 +194,7 @@ def get_import_log_path() -> Path:
 # ── Locales ──────────────────────────────────────────────────────────────────
 
 def get_locale_dir(locale_code: str) -> Path:
+    locale_code = _validate_path_segment(locale_code, kind="locale_code")
     return ensure_subdir("locales", locale_code)
 
 

@@ -250,3 +250,40 @@ def test_detect_wells_fargo():
         assert fmt == "wells_fargo"
     finally:
         os.unlink(f.name)
+
+
+# ── Year-boundary dedup (R3) ─────────────────────────────────────────────────
+
+def test_dedup_loads_all_years_in_file(isolated_finance_dir):
+    """A CSV that spans Dec→Jan must dedup against BOTH years, not just one."""
+    from import_router import import_file
+    from transaction_logger import add_transaction
+
+    # Seed: a January 2024 transaction already in storage
+    add_transaction(
+        date="2024-01-05",
+        type="expense",
+        amount=-42.50,
+        category="dining",
+        description="Coffee Shop",
+        account_id="checking",
+    )
+
+    # CSV with a Dec 2023 + Jan 2024 entry — first row is Dec, so pre-fix code
+    # would load only year 2023 transactions and miss the Jan 2024 duplicate.
+    csv_content = (
+        '"Date","Description","Amount","Running Bal."\n'
+        '"12/28/2023","Old Charge","-15.00","100.00"\n'
+        '"01/05/2024","Coffee Shop","-42.50","57.50"\n'
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+    try:
+        result = import_file(f.name, account_id="checking", dry_run=True, keep_original=False)
+        # The Jan 5 row matches the seeded transaction → should be a duplicate
+        assert result["duplicates_removed"] >= 1, (
+            f"Expected the Jan 2024 row to be flagged as duplicate. "
+            f"Got result: {result}"
+        )
+    finally:
+        os.unlink(f.name)
