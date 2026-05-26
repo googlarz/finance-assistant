@@ -155,6 +155,21 @@ KNOWN_FORMATS = {
         "decimal": ".",
         "amount_sign": "monarch",  # Monarch: negative = expense, positive = income
     },
+    "ynab": {  # YNAB ("You Need A Budget") register export
+        # YNAB export columns: Account, Flag, Date, Payee, Category Group/Category,
+        # Category Group, Category, Memo, Outflow, Inflow, Cleared
+        "detect": ["Account", "Flag", "Date", "Payee", "Memo", "Outflow", "Inflow"],
+        "date": "Date",
+        "description": "Memo",
+        "payee": "Payee",
+        "date_format": "%m/%d/%Y",
+        "delimiter": ",",
+        "encoding": "utf-8",
+        "decimal": ".",
+        "amount_sign": "split_cols",   # Outflow vs Inflow columns
+        "amount_credit": "Inflow",
+        "amount_debit": "Outflow",
+    },
     "capital_one": {
         "detect": ["Transaction Date", "Posted Date", "Card No.", "Description", "Category", "Debit", "Credit"],
         "date": "Transaction Date",
@@ -211,11 +226,19 @@ def detect_bank_format(file_path: str) -> Optional[str]:
     return None
 
 
+_CURRENCY_SYMBOLS = re.compile(r"[€$£¥₹₽\s]")
+
+
 def _parse_amount(value: str, decimal: str = ",") -> float:
-    """Parse a potentially German-formatted number."""
+    """Parse a potentially German-formatted number.
+
+    Strips currency symbols ($, €, £, ¥, ₹, ₽) and whitespace so YNAB-style
+    "$1,234.56" and "€45,00" round-trip cleanly.
+    """
     if not value:
         return 0.0
     value = value.strip().strip('"')
+    value = _CURRENCY_SYMBOLS.sub("", value)
     if decimal == ",":
         value = value.replace(".", "").replace(",", ".")
     else:
@@ -347,10 +370,14 @@ def _parse_known_format(file_path: str, fmt: dict, currency: str) -> list[dict]:
         if amount_sign == "split_cols":
             credit_val = row.get(fmt.get("amount_credit", "Credit"), "").strip()
             debit_val = row.get(fmt.get("amount_debit", "Debit"), "").strip()
-            if credit_val:
-                amount = _parse_amount(credit_val, decimal)
-            elif debit_val:
-                amount = -abs(_parse_amount(debit_val, decimal))
+            credit_amt = _parse_amount(credit_val, decimal) if credit_val else 0.0
+            debit_amt = _parse_amount(debit_val, decimal) if debit_val else 0.0
+            # YNAB writes "$0.00" in both columns by default — check parsed value,
+            # not string presence.
+            if credit_amt > 0:
+                amount = credit_amt
+            elif debit_amt > 0:
+                amount = -debit_amt
             else:
                 continue
         else:

@@ -240,6 +240,34 @@ def test_detect_capital_one():
         os.unlink(f.name)
 
 
+def test_detect_ynab():
+    csv_content = (
+        '"Account","Flag","Date","Payee","Category Group/Category","Category Group","Category","Memo","Outflow","Inflow","Cleared"\n'
+        '"Checking","","04/01/2026","Coffee Shop","Food: Dining","Food","Dining","Latte","$4.50","$0.00","Cleared"\n'
+        '"Checking","","04/02/2026","Payroll","Income: Salary","Income","Salary","","$0.00","$2,500.00","Cleared"\n'
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+    try:
+        fmt = detect_bank_format(f.name)
+        assert fmt == "ynab"
+        txns = parse_csv(f.name, bank_format="ynab")
+        assert len(txns) == 2
+        # First row: outflow $4.50 → -4.50
+        assert txns[0]["amount"] == -4.50
+        # Second row: inflow $2,500 → +2500
+        assert txns[1]["amount"] == 2500.0
+        assert txns[1]["payee"] == "Payroll"
+    finally:
+        os.unlink(f.name)
+
+
+def test_parse_amount_strips_currency():
+    assert _parse_amount("$1,234.56", ".") == 1234.56
+    assert _parse_amount("€45,00", ",") == 45.0
+    assert _parse_amount("£99.99", ".") == 99.99
+
+
 def test_detect_wells_fargo():
     # Wells Fargo has no header row — positional columns
     csv_content = '"01/15/2024","-42.50","*","","Coffee Shop"\n'
