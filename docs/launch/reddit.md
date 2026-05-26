@@ -21,7 +21,7 @@ I needed a FIRE calculator that:
 2. Knew German freelance taxes (where I am) so the "what's my real savings rate" question wasn't a fiction
 3. Didn't want my bank credentials or a subscription
 
-Couldn't find one, built one. Finance Assistant is a Claude Code skill that takes bank CSV imports and does the math locally:
+Couldn't find one, built one. Finance Assistant is a **Claude Code skill** (free CLI from Anthropic — not the web app) that takes bank CSV imports and does the math locally:
 
 - Monte Carlo FIRE simulation (10,000 paths default, configurable)
 - 6 country tax engines (DE, AT, CH, UK, US, ES) — actual brackets, not estimates
@@ -31,6 +31,8 @@ Couldn't find one, built one. Finance Assistant is a Claude Code skill that take
 
 Demo (no install): https://googlarz.github.io/finance-assistant/
 Repo: https://github.com/googlarz/finance-assistant
+
+**To use the full thing you need [Claude Code](https://claude.com/product/claude-code) installed** — file system access is required for CSV import, local SQLite, and scheduled digests. There's a claude.ai Projects template if you only want conversational use, but it can't read your statements.
 
 Not affiliated with Anthropic — just a tool I built for myself. Happy to answer questions about the FIRE math, the tax engines, or the architecture.
 
@@ -42,7 +44,7 @@ Title: `Finance Assistant v3.7.1 — a Claude Code skill for personal finance (l
 
 Body:
 
-Released v3.7.1 of Finance Assistant, a Claude Code skill that turns your `~/.finance/` directory into a personal finance copilot. New in this release:
+Released v3.7.1 of Finance Assistant, a Claude Code skill (not web claude.ai — needs the CLI for filesystem access) that turns your `~/.finance/` directory into a personal finance copilot. New in this release:
 
 - YNAB CSV import (now have 14 bank formats)
 - Recurring subscription detection with double-billing alerts

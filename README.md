@@ -5,8 +5,10 @@
 The precision of a tax accountant. The patience of a financial advisor.
 The privacy of a local app. Open source. Free forever.
 
-`6 locales` · `13 bank formats` · `7 financial domains` · `Monte Carlo FIRE`
-**claude.ai Projects** · **Claude Code** · **Claude Cowork**
+`6 locales` · `14 bank formats` · `7 financial domains` · `Monte Carlo FIRE`
+
+> **Built for Claude Code.** Full power runs in [Claude Code](https://claude.com/product/claude-code) (CSV import, SQLite, encrypted backup, inbox watcher, weekly digest, live prices).
+> A claude.ai Projects template is included for conversational use, but most features require a local install. See [Where this runs](#where-this-runs) for the matrix.
 
 **[→ Live demo](https://googlarz.github.io/finance-assistant/)** — see a real session without installing
 
@@ -88,6 +90,30 @@ Every session start checks five domains automatically:
 - Savings goal deadlines within 45 days
 - Tax filing deadlines within 45 days (German locale)
 - Monthly FIRE progress bar (`[████████░░░░░░░░░░░░] 42.3% — €317k / €750k`)
+
+---
+
+## Where this runs
+
+Finance Assistant is **built for Claude Code**. A claude.ai Projects template ships alongside it, but the browser sandbox can't reach your files, so most features are unavailable there.
+
+| Feature                                  | Claude Code (full) | claude.ai Projects (limited) |
+|------------------------------------------|:-:|:-:|
+| Conversational budgeting & advice        | ✅ | ✅ |
+| Tax math (DE/AT/CH/UK/US/ES brackets)    | ✅ | ✅ (you supply numbers) |
+| Debt avalanche/snowball comparison       | ✅ | ✅ (you supply numbers) |
+| Net-worth tracking                       | ✅ | ✅ (you supply numbers) |
+| Bank CSV import (14 formats)             | ✅ | ❌ no file access |
+| SQLite local storage + audit log         | ✅ | ❌ no local storage |
+| Recurring subscription detection         | ✅ | ❌ needs transaction history |
+| Live prices (Yahoo + CoinGecko)          | ✅ | ❌ no network in this skill's tools |
+| FIRE Monte Carlo (10k paths)             | ✅ | ❌ needs local compute |
+| Inbox watcher (drop CSV → auto-import)   | ✅ macOS launchd | ❌ |
+| Weekly digest (scheduled OS notification)| ✅ macOS launchd | ❌ |
+| Encrypted backup (`--backup`)            | ✅ | ❌ |
+| Bank sync via GoCardless                 | ✅ | ❌ |
+
+**Translation:** If you're on claude.ai web or mobile, you get a knowledgeable finance advisor that reasons over what you tell it in the chat. If you want it to read your bank statements, watch a folder, run scheduled digests, or hold a real database of your transactions, you need [Claude Code](https://claude.com/product/claude-code) (free CLI, runs locally).
 
 ---
 

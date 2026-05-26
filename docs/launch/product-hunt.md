@@ -4,10 +4,10 @@
 Finance Assistant
 
 ## Tagline (≤ 60 chars)
-Local-first personal finance copilot. No cloud, no banks.
+Local-first finance copilot. Built for Claude Code.
 
 ## Description (260 chars)
-A Claude Code skill that turns your bank CSVs into a private finance copilot. Budgets, taxes, FIRE simulations, subscription detection, debt strategies — all on your machine. 6 locales, 14 bank importers, encrypted backups, weekly digests.
+A Claude Code skill (not a SaaS) that turns your bank CSVs into a private finance copilot. Budgets, taxes, FIRE simulations, subscription detection, debt strategies — all on your machine. 6 locales, 14 bank importers, encrypted backups, weekly digests. Requires Claude Code; limited claude.ai Projects template included.
 
 ## First comment
 
@@ -23,6 +23,8 @@ Finance Assistant exists because every PFM I tried asked me to hand over my bank
 - Detects recurring subscriptions, flags double-billings, compares debt-payoff strategies
 
 What this is NOT (yet): a Plaid-style bank-sync app. v1 is CSV-import. Real-time sync is on the v3.8 roadmap.
+
+**Heads up: this is a Claude Code skill, not a hosted app.** Full features (CSV import, SQLite, scheduled digests, live prices) need Claude Code installed locally. There's a claude.ai Projects template too, but the browser sandbox can't reach files, so it's conversational-only. The README has a full matrix of what runs where.
 
 Try the no-install demo first: https://googlarz.github.io/finance-assistant/
 

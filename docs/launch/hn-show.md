@@ -20,8 +20,8 @@ What's in this release (v3.7.1):
 
 Hard limits I deliberately kept:
 - No bank API integration in v1 (Plaid/SimpleFin is on the roadmap for v3.8). You import CSVs.
-- macOS for the launchd-scheduled bits; the rest is plain Python.
-- It's a Claude Code skill — you need Claude Code installed.
+- macOS for the launchd-scheduled bits (inbox watcher, weekly digest); the rest is plain Python and works anywhere.
+- **It's a Claude Code skill — full features need [Claude Code](https://claude.com/product/claude-code) installed.** There's a claude.ai Projects template too, but the browser can't reach your files, so it's conversational only (no CSV import, no SQLite, no scheduled jobs). README has a feature matrix.
 
 Live demo (no install): https://googlarz.github.io/finance-assistant/
 Repo: https://github.com/googlarz/finance-assistant
@@ -36,3 +36,4 @@ Happy to answer questions about the architecture (SQLite schema, dedup strategy,
 - Reply to early questions within 10 minutes — drives engagement.
 - Don't editorialize headlines on subsequent comments.
 - If asked about "why not Plaid": "Plaid requires backend infrastructure; this is a single-user CLI tool. SimpleFin is on the roadmap because it works without OAuth backend."
+- If asked "does this work in the claude.ai web app?": "Partly. There's a Projects template for conversational use, but the browser can't reach files, so CSV import, SQLite, scheduled digests, and live prices all require Claude Code. The README has a full feature matrix."
