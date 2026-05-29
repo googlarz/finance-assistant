@@ -190,7 +190,7 @@ Then start a session: `What's my financial health?`
 ### Verify your install
 
 ```bash
-python3 skill.py --version    # finance-assistant 3.8.0
+python3 skill.py --version    # finance-assistant 3.9.0
 python3 skill.py --doctor     # runs health checks on your setup
 ```
 
