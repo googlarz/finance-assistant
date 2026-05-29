@@ -17,11 +17,7 @@ The privacy of a local app. Open source. Free forever.
 > **Built for Claude Code.** Full power runs in [Claude Code](https://claude.com/product/claude-code) (CSV import, SQLite, encrypted backup, inbox watcher, weekly digest, live prices).
 > A claude.ai Projects template is included for conversational use, but most features require a local install. See [Where this runs](#where-this-runs) for the matrix.
 
-**[→ Live demo](https://googlarz.github.io/finance-assistant/)** — see a real session without installing
-
-<!-- Recorded with VHS: `vhs assets/demo.tape` → assets/demo.gif. Uncomment once recorded:
-![Finance Assistant in action](assets/demo.gif)
--->
+**[→ Live demo](https://googlarz.github.io/finance-assistant/)** — see a real conversation without installing
 
 ---
 
