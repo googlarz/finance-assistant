@@ -190,7 +190,7 @@ Then start a session: `What's my financial health?`
 ### Verify your install
 
 ```bash
-python3 skill.py --version    # finance-assistant 3.9.0
+python3 skill.py --version    # finance-assistant 3.9.1
 python3 skill.py --doctor     # runs health checks on your setup
 ```
 
@@ -624,49 +624,6 @@ The privacy statement is shown once:
 
 ## Example Conversations
 
-### Budget Check
-
-```
-You:  How am I doing on my April budget?
-FA:   €340 of €400 food budget used (85%) — 28 days into 30-day month. On pace.
-      Transport: €112 / €150 (75%) — fine.
-      Eating out: €89 / €80 — OVER by €9 ⚠
-
-      Suggestion: €11 left in eating out. One meal left this month.
-      Adjacent: Groceries has €60 remaining — cooking covers the gap.
-```
-
-### FIRE Calculation
-
-```
-You:  When can I retire if I invest €1,500/month?
-FA:   FIRE number: €900,000  (€36,000 expenses ÷ 4% withdrawal rate)
-      Current portfolio: €180,000
-      Monthly investment: €1,500 at 7% average return
-
-      Projected FIRE date: 2044 (18 years)
-      Formula: FV = PV×(1+r)^n + PMT×((1+r)^n−1)/r
-
-      Confidence: Likely (assumes 7% return; actual will vary)
-      What changes it: every extra €200/month cuts ~1 year.
-```
-
-### Debt Optimization
-
-```
-You:  Best strategy to pay off my 3 loans?
-FA:   Avalanche (highest rate first):
-        Credit card €3,200 @ 18.9% → Car loan €8,600 @ 5.9% → Ratenkredit €13,000 @ 3.4%
-        Interest saved vs minimum: €2,840 | Debt-free: Nov 2027
-
-      Snowball (smallest balance first):
-        Same order (happens to match) in this case
-        Interest saved vs minimum: €1,920 | Debt-free: Feb 2028
-
-      → Avalanche saves €920 more and finishes 3 months earlier.
-        Choose snowball only if you need the win of a quick first payoff.
-```
-
 ### Monte Carlo FIRE Projection
 
 ```
@@ -675,33 +632,91 @@ FA:   Running 10,000 simulations (return 7%±12%, inflation 2%±0.8%)...
 
       Retirement probability: 73% success at 2042 target
       ┌─────────────────────────────────┐
-      │  p10   €420k  ████             │
-      │  p25   €580k  ██████           │
-      │  p50   €790k  ████████         │  ← median
-      │  p75  €1.05M  ██████████       │
-      │  p90  €1.38M  █████████████    │
+      │  p10   $420k  ████             │
+      │  p25   $580k  ██████           │
+      │  p50   $790k  ████████         │  ← median
+      │  p75  $1.05M  ██████████       │
+      │  p90  $1.38M  █████████████    │
       └─────────────────────────────────┘
-      Current: €180k target: €900k
+      Current: $180k  target: $900k
 
       Sequence risk: worst 10% of runs hit a bad first decade.
-      Mitigation: +€200/month raises success to 81%.
+      Mitigation: +$200/month raises success to 81%.
 ```
 
-### Tax Deductions (German)
+### "Should I go freelance?" (US — real SE tax + QBI math)
 
 ```
-You:  What can I deduct this year?
+You:  I make $80k as a W-2 employee. What changes if I go 1099 freelance
+      at the same $80k?
+
+FA:   Same $80k, two tax pictures (2024, single, federal):
+
+      As a W-2 employee:
+        Federal income tax       $9,441
+        Your FICA (SS + Medicare) $6,120   (employer pays another $6,120)
+        Effective rate           11.8%
+
+      As a 1099 freelancer:
+        Self-employment tax      $11,304   (you pay BOTH FICA halves — Schedule SE)
+        − ½ SE tax deduction     −$5,652   (above the line)
+        − §199A QBI deduction    −$11,950  (20% of profit, IRS Rev. Proc. 2024-40)
+        Taxable income           $47,799
+        Federal income tax       $5,569
+        Total federal + SE       $16,872
+
+      → Going freelance at the SAME headline number costs ~$1,300 more in
+        federal+SE tax, because SE tax replaces the employer's FICA share.
+        To break even you'd need to bill ~$82k. Want the break-even rate?
+```
+
+### Debt Optimization
+
+```
+You:  Best strategy to pay off my 3 loans?
+FA:   Avalanche (highest rate first):
+        Credit card $3,200 @ 18.9% → Car loan $8,600 @ 5.9% → Personal loan $13,000 @ 3.4%
+        Interest saved vs minimum: $2,840 | Debt-free: Nov 2027
+
+      Snowball (smallest balance first):
+        Same order (happens to match) in this case
+        Interest saved vs minimum: $1,920 | Debt-free: Feb 2028
+
+      → Avalanche saves $920 more and finishes 3 months earlier.
+        Choose snowball only if you need the win of a quick first payoff.
+```
+
+### Budget Check
+
+```
+You:  How am I doing on my April budget?
+FA:   $340 of $400 food budget used (85%) — 28 days into 30-day month. On pace.
+      Transport: $112 / $150 (75%) — fine.
+      Eating out: $89 / $80 — OVER by $9 ⚠
+
+      Suggestion: $11 left in eating out. One meal left this month.
+      Adjacent: Groceries has $60 remaining — cooking covers the gap.
+```
+
+### Same depth in every locale
+
+The tax math isn't US-only — each locale applies its own statute. Ask the same
+"what can I deduct?" in Germany and you get German law, not a translation of US rules:
+
+```
+You:  What can I deduct this year?  (locale: de)
 FA:   Profile: angestellt, Berlin, homeoffice 3 days/week
 
-      ✓ Arbeitnehmer-Pauschbetrag: €1,230 (automatic)
-      ✓ Homeoffice: €6/day × 210 days = €1,260 (at cap)
+      ✓ Arbeitnehmer-Pauschbetrag: €1,230 (automatic, EStG §9a)
+      ✓ Homeoffice-Pauschale: €6/day × 210 days = €1,260 (at cap)
       ✓ Pendlerpauschale: €0 (homeoffice replaces commute)
-      ? Gewerkschaftsbeitrag: enter your amount
-      ? Fortbildungskosten: any training expenses this year?
+      ? Gewerkschaftsbeitrag / Fortbildungskosten: enter amounts to refine
 
       Estimated refund above Pauschbetrag: ~€340
-      Confidence: Likely (exact figure needs actual receipts)
 ```
+
+UK pulls HMRC pension carry-forward; France applies the quotient familial and
+décote; the Netherlands handles Box 1/2/3. Six countries, one set of commands.
 
 ---
 
