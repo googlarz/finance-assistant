@@ -1,5 +1,12 @@
 # Finance Assistant
 
+[![version](https://img.shields.io/badge/version-3.9.1-blue)](https://github.com/googlarz/finance-assistant/releases)
+[![tests](https://img.shields.io/badge/tests-1%2C223%20passing-brightgreen)](#running-tests)
+[![tax cases](https://img.shields.io/badge/tax%20law-29%20official%20cases-success)](#locales)
+[![locales](https://img.shields.io/badge/locales-DE·UK·US·FR·NL·PL-orange)](#locales)
+[![local-first](https://img.shields.io/badge/local--first-no%20cloud-black)](#security--privacy)
+[![license](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey)](LICENSE)
+
 **Real math. Real law. Your machine.**
 
 The precision of a tax accountant. The patience of a financial advisor.
@@ -11,6 +18,43 @@ The privacy of a local app. Open source. Free forever.
 > A claude.ai Projects template is included for conversational use, but most features require a local install. See [Where this runs](#where-this-runs) for the matrix.
 
 **[→ Live demo](https://googlarz.github.io/finance-assistant/)** — see a real session without installing
+
+<!-- Recorded with VHS: `vhs assets/demo.tape` → assets/demo.gif. Uncomment once recorded:
+![Finance Assistant in action](assets/demo.gif)
+-->
+
+---
+
+### See it work — real output, not a mockup
+
+```
+You:  What's my FIRE confidence level?
+FA:   Running 10,000 simulations (return 7%±12%, inflation 2%±0.8%)...
+
+      Retirement probability: 73% success at 2042 target
+      ┌─────────────────────────────────┐
+      │  p10   $420k  ████             │
+      │  p25   $580k  ██████           │
+      │  p50   $790k  ████████         │  ← median
+      │  p75  $1.05M  ██████████       │
+      │  p90  $1.38M  █████████████    │
+      └─────────────────────────────────┘
+      Current: $180k  target: $900k
+
+      +$200/month raises success to 81%.
+```
+
+That's deterministic math on your numbers — not a model guessing. [More examples ↓](#example-conversations)
+
+### Try it in 30 seconds
+
+```bash
+git clone --recurse-submodules https://github.com/googlarz/finance-assistant.git
+cd finance-assistant && pip install -r requirements.txt
+python3 skill.py --demo        # seeds sample data → opens a dashboard
+```
+
+Then add it as a [Claude Code](https://claude.com/product/claude-code) skill and ask *"What's my financial health?"* — [full setup ↓](#quick-start).
 
 ---
 
