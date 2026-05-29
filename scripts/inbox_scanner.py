@@ -86,6 +86,18 @@ def _preview_file(file_path: Path) -> dict:
         # account_id="__preview__" — deduplication runs against an empty account,
         # so all rows appear as unique. Accurate for counting; not for dedup.
         result = import_file(str(file_path), account_id="__preview__", dry_run=True)
+        if result.get("needs_llm_extraction"):
+            # No built-in parser matched. The headless scanner can't invoke
+            # Claude — flag it so the user imports it in a live session.
+            return {
+                "importable": True,
+                "needs_llm_extraction": True,
+                "format": "needs Claude to read",
+                "transaction_count": "?",
+                "total_parsed": 0,
+                "duplicates_removed": 0,
+                "account": result.get("account_id", ""),
+            }
         return {
             "importable": True,
             "format": result.get("format", "unknown"),

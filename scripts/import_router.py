@@ -163,10 +163,25 @@ def import_file(
             result["dry_run"] = False
         return result
     else:
-        return {"error": f"Unknown format: {fmt}", "file": file_path}
+        # No built-in parser matched. Don't give up — this skill runs inside
+        # Claude, so hand the raw content back for LLM extraction.
+        from llm_import import prepare_extraction_request
+        req = prepare_extraction_request(file_path, account_id, currency)
+        req["original_saved"] = original_saved
+        return req
 
     from transaction_normalizer import normalize_transactions
     normalized = normalize_transactions(raw, account_id, fmt, currency)
+
+    # A known format was detected but yielded nothing (odd layout, locale variant
+    # the parser doesn't cover). Fall back to LLM extraction rather than silently
+    # importing zero transactions.
+    if not normalized:
+        from llm_import import prepare_extraction_request
+        req = prepare_extraction_request(file_path, account_id, currency)
+        req["original_saved"] = original_saved
+        req["note"] = f"'{fmt}' parser matched the file type but extracted 0 rows — using LLM fallback."
+        return req
 
     # Deduplicate against existing.
     # Bank exports commonly span year boundaries (December → January). Load

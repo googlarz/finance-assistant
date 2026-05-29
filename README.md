@@ -5,7 +5,7 @@
 The precision of a tax accountant. The patience of a financial advisor.
 The privacy of a local app. Open source. Free forever.
 
-`6 locales` · `14 bank formats` · `7 financial domains` · `Monte Carlo FIRE`
+`6 locales` · `14 bank formats + any file via LLM` · `7 financial domains` · `Monte Carlo FIRE`
 
 > **Built for Claude Code.** Full power runs in [Claude Code](https://claude.com/product/claude-code) (CSV import, SQLite, encrypted backup, inbox watcher, weekly digest, live prices).
 > A claude.ai Projects template is included for conversational use, but most features require a local install. See [Where this runs](#where-this-runs) for the matrix.
@@ -79,7 +79,7 @@ Finance Assistant covers the full personal finance lifecycle across 20+ operatin
 | **Audit Trail** | "what changed today?" | Append-only log of every mutation |
 | **Insurance Reviewer** | "do I have enough coverage?" | Coverage gap analysis, renewal alerts |
 | **Net Worth Dashboard** | "where do I stand?" | Net worth with 7-domain health score and trend |
-| **Data Import** | "import this DKB CSV" | Parse → preview → categorize → deduplicate → import |
+| **Data Import** | "import this statement" | Any format — 14 parsers fast-path, LLM reads the rest → preview → categorize → dedupe → import |
 | **Scenario Lab** | "should I rent or buy?" | Before/after comparison with multi-year projection |
 | **Monte Carlo** | "what's my FIRE confidence?" | 10,000-simulation distribution with p10/p50/p90 outcomes |
 | **Specialist Handoff** | complex case | Structured brief for a Steuerberater or financial adviser |
@@ -500,6 +500,9 @@ The privacy statement is shown once:
 | OFX / QFX | Most German brokers, international banks |
 | PDF | Statement parsing for supported layouts |
 | Image (receipt) | Photo → transaction via receipt scanner |
+| **Anything else** | **No parser? Claude reads it.** Unusual bank, foreign layout, copy-pasted table, scanned PDF, screenshot — the LLM extracts the transactions directly, then they run through the *same* sanitize → categorize → dedupe → preview pipeline. |
+
+> **Why "anything else" works:** this is an LLM-native product, not a pile of regex parsers. The 14 bundled formats are a fast path; when none match, Finance Assistant doesn't fail — it hands the raw content to Claude (the session you're already in) to extract. Nothing extra leaves your machine, and LLM-extracted rows get no special trust: same deduplication, same CSV-injection sanitization, same confirm-before-commit flow as a built-in parser.
 
 ### Import Flow
 
@@ -591,6 +594,7 @@ The privacy statement is shown once:
 | `mt940_importer.py` | SWIFT MT940 with graceful fallback if library not installed |
 | `ofx_importer.py` | OFX/QFX with normalized date parsing |
 | `transaction_normalizer.py` | Auto-categorize, deduplicate, normalize amounts |
+| `llm_import.py` | LLM-native fallback for any unrecognized format — Claude extracts, same sanitize/normalize/dedupe pipeline |
 
 ### Intelligence & Output
 

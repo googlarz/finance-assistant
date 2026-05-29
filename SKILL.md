@@ -372,6 +372,12 @@ When the user provides a CSV, MT940, OFX, PDF, or image file:
 6. Deduplicate against existing transactions
 7. Update account balance and budget actuals
 
+**LLM-native fallback — handle ANY format.** If `import_file()` returns a dict with `needs_llm_extraction: True`, no built-in parser matched (unusual bank, foreign layout, copy-pasted table, scanned PDF, screenshot). Do NOT tell the user it's unsupported. Instead:
+1. Read the content yourself: use `result["raw_text"]` if present; if `result["source"] == "image"`, vision-read the file at `result["file_path"]`.
+2. Extract every transaction into a list of dicts matching `result["schema"]` (date `YYYY-MM-DD`, `amount` negative=out/positive=in, `description`, optional `payee`/`currency`). Skip headers, totals, and running-balance rows.
+3. Call `llm_import.ingest_extracted(rows, account_id, currency, dry_run=True)` to preview, show the user the first 5-10, then `dry_run=False` to commit. The extracted rows go through the same sanitize → normalize → categorize → dedupe pipeline as every other import — no special trust.
+This is what makes the skill work with any statement format, not just the 14 bundled parsers.
+
 ### Investment Tracker
 
 For portfolio questions:
