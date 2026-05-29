@@ -46,6 +46,62 @@ _DEFAULTS: dict[str, tuple[str, str]] = {
     "DK": ("Denmark", "DKK"),
 }
 
+# Authoritative tax-authority sources per locale. Injected into the generated
+# TODOs so a contributor has the real link instead of "<official URL>" — this
+# is the difference between a ~1-evening contribution and a research project.
+_SOURCES: dict[str, dict[str, str]] = {
+    "AT": {
+        "authority": "Bundesministerium für Finanzen (BMF)",
+        "income_tax": "https://www.bmf.gv.at/themen/steuern/das-steuersystem/einkommensteuer.html",
+        "social": "https://www.gesundheitskasse.at",
+    },
+    "CH": {
+        "authority": "Eidgenössische Steuerverwaltung (ESTV)",
+        "income_tax": "https://www.estv.admin.ch/estv/en/home/direct-federal-tax/direct-federal-tax.html",
+        "social": "https://www.ahv-iv.ch",
+    },
+    "CA": {
+        "authority": "Canada Revenue Agency (CRA)",
+        "income_tax": "https://www.canada.ca/en/revenue-agency/services/tax/individuals/frequently-asked-questions-individuals/canadian-income-tax-rates-individuals-current-previous-years.html",
+        "social": "https://www.canada.ca/en/employment-social-development/programs/ei.html",
+    },
+    "AU": {
+        "authority": "Australian Taxation Office (ATO)",
+        "income_tax": "https://www.ato.gov.au/rates/individual-income-tax-rates/",
+        "social": "https://www.ato.gov.au/individuals/super/",
+    },
+    "ES": {
+        "authority": "Agencia Tributaria",
+        "income_tax": "https://sede.agenciatributaria.gob.es/Sede/en_gb/irpf.html",
+        "social": "https://www.seg-social.es",
+    },
+    "IT": {
+        "authority": "Agenzia delle Entrate",
+        "income_tax": "https://www.agenziaentrate.gov.it/portale/web/guest/schede/dichiarazioni/irpef",
+        "social": "https://www.inps.it",
+    },
+    "PT": {
+        "authority": "Autoridade Tributária e Aduaneira",
+        "income_tax": "https://www.portaldasfinancas.gov.pt",
+        "social": "https://www.seg-social.pt",
+    },
+    "SE": {
+        "authority": "Skatteverket",
+        "income_tax": "https://www.skatteverket.se/privat/skatter/beloppochprocent.4.html",
+        "social": "https://www.forsakringskassan.se",
+    },
+    "NO": {
+        "authority": "Skatteetaten",
+        "income_tax": "https://www.skatteetaten.no/en/rates/",
+        "social": "https://www.nav.no",
+    },
+    "DK": {
+        "authority": "Skattestyrelsen",
+        "income_tax": "https://skat.dk/en-us/individuals/tax-cards-and-tax-assessment-notices",
+        "social": "https://www.borger.dk",
+    },
+}
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -66,6 +122,13 @@ def generate(code: str, locale_name: str, currency: str, *, dry_run: bool = Fals
     code_upper = code.upper()
     code_lower = code.lower()
     target = _locale_dir(code_lower)
+
+    # Resolve authoritative source URLs for this locale (real links injected
+    # into the generated TODOs). Falls back to placeholders for unknown codes.
+    src = _SOURCES.get(code_upper, {})
+    src_authority = src.get("authority", f"{locale_name} national tax authority")
+    src_income = src.get("income_tax", "<official income-tax rates URL>")
+    src_social = src.get("social", "<official social-security URL>")
 
     if target.exists() and any(target.iterdir()):
         print(f"⚠  {target} already exists and is non-empty. Aborting to avoid overwrite.")
@@ -110,10 +173,12 @@ def generate(code: str, locale_name: str, currency: str, *, dry_run: bool = Fals
         Cite your source as a comment on each value — makes future updates
         easier and lets reviewers verify correctness.
 
-        Sources to check:
-          - Official government tax authority website
-          - Annual tax reform / Jahressteuergesetz equivalent
-          - OECD country tax notes (stats.oecd.org)
+        Primary source — {src_authority}:
+          - Income tax rates:   {src_income}
+          - Social security:    {src_social}
+        Cross-check:
+          - OECD country tax notes: https://stats.oecd.org (Table I.1–I.7)
+          - PwC Worldwide Tax Summaries: https://taxsummaries.pwc.com/{locale_name.lower().replace(' ', '-')}
         \"\"\"
 
         from __future__ import annotations
@@ -126,12 +191,12 @@ def generate(code: str, locale_name: str, currency: str, *, dry_run: bool = Fals
             "currency": "{currency}",
 
             # Income tax-free allowance / personal allowance
-            # TODO: replace with real value. Source: <official URL>
+            # TODO: replace with real value. Source: {src_income}
             "tax_free_allowance": 0,
 
             # Tax brackets: list of {{rate: float, from: int, to: int | None}}
             # 'to' is None for the top bracket.
-            # TODO: fill with real brackets. Source: <official URL>
+            # TODO: fill with real brackets. Source: {src_income}
             "tax_brackets": [
                 {{"rate": 0.20, "from": 0, "to": None}},  # TODO — placeholder
             ],
@@ -140,7 +205,7 @@ def generate(code: str, locale_name: str, currency: str, *, dry_run: bool = Fals
             "standard_deduction": 0,
 
             # Social contribution rate (employee share, approximate)
-            # TODO: source from social security authority
+            # TODO: source from social security authority. Source: {src_social}
             "social_contribution_rate": 0.0,
 
             # Pension contribution ceiling (annual, gross)
@@ -267,7 +332,10 @@ def generate(code: str, locale_name: str, currency: str, *, dry_run: bool = Fals
     # ── Validate_locale snippet ───────────────────────────────────────────────
     print(f"""\
 Next steps:
-  1. Fill in every TODO in locales/{code_lower}/ with real values + source URLs.
+  1. Fill in every TODO in locales/{code_lower}/ with real values.
+     Primary source ({src_authority}):
+       income tax: {src_income}
+       social:     {src_social}
   2. Add this entry to scripts/validate_locale.py LOCALE_CONTRACTS:
 
     "{code_lower}": {{

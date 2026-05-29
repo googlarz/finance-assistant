@@ -5,7 +5,7 @@ Submit to: https://github.com/hesreallyhim/awesome-claude-code
 Add to the **Skills** section (or **Plugins** — check current taxonomy):
 
 ```markdown
-- [Finance Assistant](https://github.com/googlarz/finance-assistant) — Personal finance copilot: budgets, multi-locale taxes (DE/AT/CH/UK/US/ES), FIRE Monte Carlo, debt strategies, subscription detection, encrypted backup. Local-first, 14 bank-CSV importers, audit log. Try the [live demo](https://googlarz.github.io/finance-assistant/) without installing.
+- [Finance Assistant](https://github.com/googlarz/finance-assistant) — Personal finance copilot: budgets, multi-locale taxes (DE/FR/NL/PL/UK/US), FIRE Monte Carlo, debt strategies, subscription detection, encrypted backup. Local-first, 14 bank-CSV importers, audit log. Try the [live demo](https://googlarz.github.io/finance-assistant/) without installing.
 ```
 
 ## PR body template

@@ -11,7 +11,7 @@ I built Finance Assistant because every cloud PFM I tried wanted my bank credent
 This one lives entirely on your machine. Drop a bank CSV into an inbox folder, get a notification when it's parsed, ask Claude things like "did I overspend on dining this month?" or "what's my real after-tax income on €80k freelance in Berlin?". No cloud sync, no telemetry, no API keys to anyone but you.
 
 What's in this release (v3.7.1):
-- 6 country tax engines (DE, AT, CH, UK, US, ES) — actual bracket-accurate calculations, not estimates
+- 6 country tax engines (DE, FR, NL, PL, UK, US) — actual bracket-accurate calculations, not estimates
 - 14 bank CSV importers (DKB, ING, Sparkasse, N26, Chase, Bank of America, Wells Fargo, Monarch, YNAB, Mint, Revolut, Wise, Commerzbank, Capital One)
 - SQLite + JSON dual storage, encrypted backup, audit log of every mutation
 - Detects recurring subscriptions you forgot about (and flags potential double-billings)

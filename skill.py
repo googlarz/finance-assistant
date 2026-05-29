@@ -119,6 +119,18 @@ def main() -> str:
 
     profile_display = display_profile(compact=True)
 
+    # Suppression footer — appended to whatever we return, so the user always
+    # learns why the session is quiet (set after get_session_alerts runs).
+    def _with_footer(text: str) -> str:
+        try:
+            from session_alerts import format_suppression_footer
+            footer = format_suppression_footer()
+            if footer:
+                return text + "\n\n" + footer
+        except Exception:
+            pass
+        return text
+
     # Phase 3: two-tier monitor output
     try:
         from session_alerts import get_session_alerts
@@ -128,14 +140,14 @@ def main() -> str:
             context = build_monitor_context(profile, alerts)
             monitor_output = format_monitor_output(context)
             if monitor_output:
-                return profile_display + "\n\n" + monitor_output
+                return _with_footer(profile_display + "\n\n" + monitor_output)
     except Exception:
         # Fall back to legacy flat alerts
         try:
             from session_alerts import get_session_alerts, format_alerts
             alerts = get_session_alerts(profile)
             if alerts:
-                return profile_display + "\n\n" + format_alerts(alerts)
+                return _with_footer(profile_display + "\n\n" + format_alerts(alerts))
         except Exception:
             pass  # Alerts must never crash the skill
 
@@ -144,11 +156,11 @@ def main() -> str:
         from data_coach import get_unlock_nudge, format_nudge
         nudge = get_unlock_nudge(profile)
         if nudge:
-            return profile_display + "\n\n" + format_nudge(nudge)
+            return _with_footer(profile_display + "\n\n" + format_nudge(nudge))
     except Exception:
         pass
 
-    return profile_display
+    return _with_footer(profile_display)
 
 
 def _setup_watcher() -> None:
@@ -411,11 +423,65 @@ if __name__ == "__main__":
         print(f"  Recommendation: {c['recommendation']}")
         sys.exit(0)
 
+    if "--tax-brief" in sys.argv:
+        _setup_db()
+        from tax_brief import generate as _gen_brief
+        year = None
+        for i, arg in enumerate(sys.argv):
+            if arg == "--year" and i + 1 < len(sys.argv):
+                try:
+                    year = int(sys.argv[i + 1])
+                except ValueError:
+                    pass
+        path = _gen_brief(get_profile() or {}, year)
+        print(f"Tax filing brief written to: {path}")
+        sys.exit(0)
+
+    if "--show-suppressed" in sys.argv:
+        _setup_db()
+        import session_alerts as _sa
+        _sa.get_session_alerts(get_profile() or {})  # populates _last_suppressed
+        sup = _sa._last_suppressed
+        if not sup:
+            print("No alerts are currently suppressed.")
+        else:
+            print(f"**{len(sup)} suppressed alert(s)** (unchanged since last shown):\n")
+            for a in sup:
+                print(f"[{a.get('urgency','info')}] {a.get('title','')} — {a.get('detail','')}")
+            print("\nSay 'clear suppression' or run --clear-suppression to resurface them.")
+        sys.exit(0)
+
     if "--subscriptions" in sys.argv:
         _setup_db()
         from subscription_detector import get_for_account, format_subscriptions
         subs = get_for_account(account_id="default")
         print(format_subscriptions(subs))
+        try:
+            from subscription_actions import format_actions, get_all_actions
+            if get_all_actions():
+                print("\n" + format_actions())
+        except Exception:
+            pass
+        sys.exit(0)
+
+    if "--flag-subscription" in sys.argv or "--mark-subscription" in sys.argv:
+        # --flag-subscription "Netflix"  → flag to cancel
+        # --mark-subscription "Netflix" cancelled|kept|watching
+        _setup_db()
+        from subscription_actions import set_action
+        args = sys.argv
+        merchant, status = None, "flagged_to_cancel"
+        for i, a in enumerate(args):
+            if a == "--flag-subscription" and i + 1 < len(args):
+                merchant, status = args[i + 1], "flagged_to_cancel"
+            elif a == "--mark-subscription" and i + 1 < len(args):
+                merchant = args[i + 1]
+                status = args[i + 2] if i + 2 < len(args) else "cancelled"
+        if not merchant:
+            print("Usage: --flag-subscription <merchant> | --mark-subscription <merchant> <status>", file=sys.stderr)
+            sys.exit(1)
+        rec = set_action(merchant, status)
+        print(f"✓ {rec['merchant']} → {rec['status']}")
         sys.exit(0)
 
     if "--audit" in sys.argv:

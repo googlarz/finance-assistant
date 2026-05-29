@@ -35,6 +35,11 @@ except ImportError:
 
 URGENCY_LEVELS = ("critical", "warning", "info")
 
+# Alerts suppressed during the most recent get_session_alerts() call.
+# Populated by the suppression loop; read by get_suppressed_summary() so the
+# session footer can tell the user *why* it's quieter than expected.
+_last_suppressed: list[dict] = []
+
 
 def _alert(urgency: str, domain: str, title: str, detail: str, action: str = "") -> dict:
     return {
@@ -598,6 +603,22 @@ def get_session_alerts(profile: Optional[dict] = None) -> list[dict]:
         from subscription_detector import get_for_account, summarize
         subs = get_for_account(account_id="default")
         s = summarize(subs)
+
+        # Highest-value: subscriptions the user flagged to cancel but are STILL charging
+        try:
+            from subscription_actions import still_charging_after_flag
+            zombies = still_charging_after_flag(subs)
+            for z in zombies:
+                all_alerts.append(_alert(
+                    "warning",
+                    "subscriptions",
+                    f"'{z['merchant']}' still charging — you flagged it to cancel",
+                    f"€{abs(z['monthly_cost']):.2f}/mo is still going out since you flagged it.",
+                    f"Cancel it with the provider, then say 'mark {z['merchant']} cancelled'.",
+                ))
+        except Exception:
+            pass
+
         if s["duplicate_count"]:
             all_alerts.append(_alert(
                 "warning",
@@ -636,11 +657,15 @@ def get_session_alerts(profile: Optional[dict] = None) -> list[dict]:
 
     # Phase 2: telemetry + condition-delta suppression
     # Critical alerts never suppressed. Inbox alerts never suppressed.
+    global _last_suppressed
+    _last_suppressed = []
     try:
         from alert_telemetry import is_suppressed, mark_fired, log_fired as _log_fired
         to_emit = []
         for alert in all_alerts:
-            if not is_suppressed(alert):
+            if is_suppressed(alert):
+                _last_suppressed.append(alert)
+            else:
                 mark_fired(alert)
                 _log_fired(alert)
                 to_emit.append(alert)
@@ -705,3 +730,30 @@ def format_alerts(alerts: list[dict]) -> str:
             lines.append(f"   → {a['action']}")
 
     return "\n".join(lines)
+
+
+def get_suppressed_summary() -> dict:
+    """Return a summary of alerts suppressed during the last get_session_alerts().
+
+    {"count": int, "domains": [str]}  — count is 0 if nothing was suppressed.
+    """
+    domains = sorted({a.get("domain", "?") for a in _last_suppressed})
+    return {"count": len(_last_suppressed), "domains": domains}
+
+
+def format_suppression_footer() -> str:
+    """One-line footer telling the user why the session is quieter than usual.
+
+    Returns "" when nothing was suppressed. Builds trust in the alert system by
+    making suppression visible rather than silent.
+    """
+    summary = get_suppressed_summary()
+    if not summary["count"]:
+        return ""
+    n = summary["count"]
+    doms = ", ".join(summary["domains"][:3])
+    more = "" if len(summary["domains"]) <= 3 else f" +{len(summary['domains']) - 3} more"
+    return (
+        f"_{n} alert{'s' if n != 1 else ''} suppressed (unchanged since last seen: "
+        f"{doms}{more}) — say 'show suppressed' to review._"
+    )

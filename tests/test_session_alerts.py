@@ -176,3 +176,26 @@ def test_format_alerts_nonempty():
 def test_get_session_alerts_returns_list(isolated_finance_dir):
     result = get_session_alerts({})
     assert isinstance(result, list)
+
+
+# ── Suppression transparency (#6) ────────────────────────────────────────────
+
+def test_suppression_footer_empty_when_nothing_suppressed(isolated_finance_dir):
+    import session_alerts as sa
+    sa._last_suppressed = []
+    assert sa.format_suppression_footer() == ""
+    assert sa.get_suppressed_summary() == {"count": 0, "domains": []}
+
+
+def test_suppression_footer_reports_count_and_domains(isolated_finance_dir):
+    import session_alerts as sa
+    sa._last_suppressed = [
+        {"urgency": "info", "domain": "budget", "title": "x", "detail": "y"},
+        {"urgency": "info", "domain": "fire", "title": "a", "detail": "b"},
+    ]
+    summary = sa.get_suppressed_summary()
+    assert summary["count"] == 2
+    assert set(summary["domains"]) == {"budget", "fire"}
+    footer = sa.format_suppression_footer()
+    assert "2 alerts suppressed" in footer
+    assert "show suppressed" in footer

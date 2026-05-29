@@ -24,7 +24,7 @@ I needed a FIRE calculator that:
 Couldn't find one, built one. Finance Assistant is a **Claude Code skill** (free CLI from Anthropic — not the web app) that takes bank CSV imports and does the math locally:
 
 - Monte Carlo FIRE simulation (10,000 paths default, configurable)
-- 6 country tax engines (DE, AT, CH, UK, US, ES) — actual brackets, not estimates
+- 6 country tax engines (DE, FR, NL, PL, UK, US) — actual brackets, not estimates
 - Detects recurring subscriptions you forgot about
 - Encrypted backup, audit log
 - Weekly digest delivered via launchd cron — no Claude session needed
@@ -62,4 +62,4 @@ Plus a stack of security/integrity fixes from a Codex adversarial review (path t
 Demo: https://googlarz.github.io/finance-assistant/
 Repo: https://github.com/googlarz/finance-assistant
 
-Feedback welcome, especially on the locale system if you're in AT/CH and want to fill in the scaffolds.
+Feedback welcome, especially on the locale system if you're in a country we don't cover yet (AT, CH, ES, IT, …) and want to scaffold it — the generator + source-URL-annotated TODOs make it a ~1-evening contribution.

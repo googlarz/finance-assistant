@@ -100,7 +100,7 @@ Finance Assistant is **built for Claude Code**. A claude.ai Projects template sh
 | Feature                                  | Claude Code (full) | claude.ai Projects (limited) |
 |------------------------------------------|:-:|:-:|
 | Conversational budgeting & advice        | ✅ | ✅ |
-| Tax math (DE/AT/CH/UK/US/ES brackets)    | ✅ | ✅ (you supply numbers) |
+| Tax math (DE/FR/NL/PL/UK/US brackets)    | ✅ | ✅ (you supply numbers) |
 | Debt avalanche/snowball comparison       | ✅ | ✅ (you supply numbers) |
 | Net-worth tracking                       | ✅ | ✅ (you supply numbers) |
 | Bank CSV import (14 formats)             | ✅ | ❌ no file access |
@@ -130,6 +130,8 @@ npm install -g @musistudio/claude-code-router
 ```
 
 **Honest tradeoff:** open local models are meaningfully weaker than Claude on multi-step tax reasoning, bracket math, and "explain why" answers. You will get less precise tax calculations and worse advice quality. Use this mode if data sovereignty matters more than answer quality — e.g. when working with confidential client data or during the EU sovereignty audit at your job. For your own personal finances, the privacy gain over the standard local-first model (your data never leaves your machine; only the conversation does) is usually not worth the quality drop.
+
+> **About the "Real math. Real law." promise at the top of this README:** that guarantee holds on the **default Claude path** — the tax engines apply real statute and the calculations are bracket-accurate regardless of model, but *interpreting* your situation correctly (which rule applies, what's deductible) is where a weaker local model degrades. Sovereignty mode explicitly trades away the advice-quality half of that promise. The deterministic math (`locales/<code>/tax_calculator.py`, invoked by `scripts/tax_engine.py`) runs the same either way; the reasoning around it does not. Pick the default path for anything tax-accuracy-critical.
 
 ---
 
