@@ -63,7 +63,7 @@ python3 skill.py --dashboard  # generate from your real data → ~/.finance/dash
 
 ## What It Does
 
-Finance Assistant covers the full personal finance lifecycle across 18 operating modes:
+Finance Assistant covers the full personal finance lifecycle across 20+ operating modes:
 
 | Mode | What you say | What you get |
 |------|-------------|-------------|
@@ -72,7 +72,11 @@ Finance Assistant covers the full personal finance lifecycle across 18 operating
 | **Savings Planner** | "I want to save €10k for a trip" | Timeline projection, monthly contribution needed |
 | **Investment Tracker** | "show my portfolio" | Allocation, total return, XIRR, rebalance suggestions |
 | **Debt Optimizer** | "best way to pay off my debts?" | Avalanche vs snowball comparison, debt-free date, interest saved |
-| **Tax Module** | "what can I deduct?" | Locale-specific deductions (DE/UK/FR/NL/PL bundled) |
+| **Tax Module** | "what can I deduct?" | Locale-specific deductions (DE/UK/FR/NL/PL/US bundled) |
+| **Subscription Radar** | "what am I subscribed to?" | Detects recurring charges, flags duplicates + still-charging-after-cancel |
+| **Tax Filing Brief** | "prep my taxes for my accountant" | Hand-off doc: computed tax + statutory rules + deduction + document checklist |
+| **Encrypted Backup** | "back up my data" | One file, AES + PBKDF2, to disk or iCloud |
+| **Audit Trail** | "what changed today?" | Append-only log of every mutation |
 | **Insurance Reviewer** | "do I have enough coverage?" | Coverage gap analysis, renewal alerts |
 | **Net Worth Dashboard** | "where do I stand?" | Net worth with 7-domain health score and trend |
 | **Data Import** | "import this DKB CSV" | Parse → preview → categorize → deduplicate → import |
@@ -88,11 +92,14 @@ Finance Assistant covers the full personal finance lifecycle across 18 operating
 
 ### Proactive Session Alerts
 
-Every session start checks five domains automatically:
+Every session start scans your finances and surfaces only what needs attention — ranked by urgency, with stale alerts auto-suppressed (and the footer tells you when it hid something):
 - Budget overspend or pacing warnings ("85% of Groceries used at 16% of month")
 - Upcoming recurring payments in the next 7 days
 - Savings goal deadlines within 45 days
-- Tax filing deadlines within 45 days (German locale)
+- Tax filing deadlines, incl. US quarterly estimated-tax dates
+- Portfolio drift past your target allocation
+- Recurring subscriptions — total burden, duplicates, and "still charging after you flagged it to cancel"
+- Debt strategy nudges (avalanche could save you €X)
 - Monthly FIRE progress bar (`[████████░░░░░░░░░░░░] 42.3% — €317k / €750k`)
 
 ---
@@ -183,7 +190,7 @@ Then start a session: `What's my financial health?`
 ### Verify your install
 
 ```bash
-python3 skill.py --version    # finance-assistant 3.3.0
+python3 skill.py --version    # finance-assistant 3.8.0
 python3 skill.py --doctor     # runs health checks on your setup
 ```
 
@@ -226,8 +233,9 @@ Locales are maintained in a separate git submodule at **https://github.com/googl
 | **`fr`** — France | Quotient familial, décote, IR tranches, CSG/CRDS with assiette réduite (Art. L136-2 CSS) |
 | **`nl`** — Netherlands | Box 1/2/3, heffingskorting, arbeidskorting (Box 3 Kerstarrest note included) |
 | **`pl`** — Poland | Polski Ład reform: 12%/32%, 30k PLN free amount, składka zdrowotna |
+| **`us`** — United States | Federal income tax brackets, standard deduction, self-employment tax + QBI §199A, quarterly estimated-tax deadlines |
 
-All locales are validated against **29 official tax authority test cases** (BMF, HMRC, DGFiP, Belastingdienst, KAS). Run `python3 -m pytest locales/validation/ -v` to verify.
+DE, FR, NL, PL, and UK are validated against **29 official tax authority test cases** (BMF, HMRC, DGFiP, Belastingdienst, KAS) — run `python3 -m pytest locales/tests/test_validation.py -v`. The US locale ships with unit tests; official IRS reference cases are still being added (contributions welcome).
 
 New locales can be contributed independently to the locales repository without touching the main skill code. See the [locales repo](https://github.com/googlarz/finance-assistant-locales) for the plugin interface, provenance format, and contribution guide.
 
@@ -351,7 +359,16 @@ As of v3.0, the primary store is **SQLite** (`finance.db`, WAL mode). JSON files
 │   └── import_log.json          # Import history for deduplication
 ├── workspace/
 │   └── 2025.json                # Financial health dashboard
+├── subscriptions/
+│   └── actions.json             # Subscription cancel/keep tracking
+├── household/
+│   ├── household.json           # Members + shared config
+│   ├── shared_expenses.json     # Split expense ledger
+│   └── shared_goals.json        # Household goals with per-member contributions
+├── telemetry/
+│   └── locale_usage.jsonl       # Which locales get used (no financial data)
 ├── exchange_rates.json           # Cached FX rates (24h TTL)
+├── audit.log                     # Append-only mutation log (every change)
 └── audit/
     └── access_log.json           # Audit trail of all data access
 ```
@@ -478,9 +495,11 @@ The privacy statement is shown once:
 
 | Format | Banks / Sources |
 |--------|----------------|
-| CSV (auto-detected by header fingerprint) | DKB, ING-DiBa, Comdirect, N26, Wise (EUR), Revolut (EUR), generic fallback |
+| CSV (auto-detected by header fingerprint) | **14 formats** — 🇩🇪 DKB, ING, Sparkasse, Commerzbank, N26 · 🇺🇸 Chase, Bank of America, Wells Fargo, Capital One · 🌍 Wise, Revolut · 📊 Mint, Monarch, YNAB · plus a generic fallback |
 | MT940 | Any German bank (SWIFT standard) |
 | OFX / QFX | Most German brokers, international banks |
+| PDF | Statement parsing for supported layouts |
+| Image (receipt) | Photo → transaction via receipt scanner |
 
 ### Import Flow
 
@@ -531,7 +550,9 @@ The privacy statement is shown once:
 | Module | Purpose |
 |--------|---------|
 | `investment_tracker.py` | Portfolio CRUD, allocation, FIRE number, monthly snapshots |
-| `price_sync.py` | Fetch live ETF/stock prices from Yahoo Finance (no API key), update `current_value`, 6h TTL |
+| `price_sync.py` | Live prices — Yahoo Finance for stocks/ETFs, CoinGecko for crypto (no API key), 6h TTL |
+| `subscription_detector.py` | Detect recurring charges from transaction history (monthly/yearly cadence, duplicates, price changes) |
+| `subscription_actions.py` | Flag → remind → cancel loop; alerts if a flagged sub keeps charging |
 | `investment_returns.py` | TWR, XIRR (Newton's method), per-holding performance |
 | `debt_optimizer.py` | Avalanche/snowball simulation, mortgage optimization, debt-free date |
 | `insurance_analyzer.py` | Policy tracking, coverage gaps, renewal alerts |
@@ -542,6 +563,8 @@ The privacy statement is shown once:
 | Module | Purpose |
 |--------|---------|
 | `tax_engine.py` | Country-agnostic interface, delegates to locale plugin via `importlib` |
+| `tax_brief.py` | Accountant/Steuerberater filing brief: computed tax + rules + deduction + doc checklist |
+| `locale_telemetry.py` | Privacy-safe record of which locales get used (locale + operation only) |
 | `locale_registry.py` | Rule provenance (source URL, verification date, confidence) |
 | `locale_loader.py` | Dynamic locale import, on-demand skeleton builder for new countries |
 | `locales/de/` | German locale: income tax, Soli, social contributions, 2024–2026 |
@@ -564,7 +587,7 @@ The privacy statement is shown once:
 | Module | Purpose |
 |--------|---------|
 | `import_router.py` | Format detection and routing |
-| `csv_importer.py` | DKB, ING-DiBa, Comdirect, N26, Wise, Revolut, generic |
+| `csv_importer.py` | 14 bank formats (DKB, ING, Sparkasse, Commerzbank, N26, Chase, BofA, Wells Fargo, Capital One, Wise, Revolut, Mint, Monarch, YNAB) + currency-symbol-aware parsing + generic fallback |
 | `mt940_importer.py` | SWIFT MT940 with graceful fallback if library not installed |
 | `ofx_importer.py` | OFX/QFX with normalized date parsing |
 | `transaction_normalizer.py` | Auto-categorize, deduplicate, normalize amounts |
@@ -588,6 +611,10 @@ The privacy statement is shown once:
 | Module | Purpose |
 |--------|---------|
 | `data_safety.py` | Fernet AES encryption, permissions hardening, git guard, export, delete, sanitize, audit |
+| `audit_log.py` | Append-only mutation log (`~/.finance/audit.log`) — every change, with rotation |
+| `backup.py` | Encrypted `.tar.gz` backup/restore (PBKDF2 + Fernet) to disk or iCloud |
+| `sovereignty_check.py` | Measures local-model (Ollama) tax accuracy vs the deterministic engine |
+| `household.py` | Shared household: members, expense splits, settle-up, shared goals |
 
 ---
 
@@ -697,7 +724,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the locale plugin spec — adding a n
 ```bash
 # Full suite (main + locales + official validation)
 python3 -m pytest tests/ locales/tests/ locales/validation/ -q
-# 861 tests — all modules, all locales, all official tax authority cases
+# 1,208 tests — all modules, all locales, all official tax authority cases
 
 # Main skill only
 python3 -m pytest tests/ -v
