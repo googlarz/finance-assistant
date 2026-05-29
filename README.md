@@ -1,7 +1,7 @@
 # Finance Assistant
 
-[![version](https://img.shields.io/badge/version-3.9.1-blue)](https://github.com/googlarz/finance-assistant/releases)
-[![tests](https://img.shields.io/badge/tests-1%2C223%20passing-brightgreen)](#running-tests)
+[![version](https://img.shields.io/badge/version-3.9.2-blue)](https://github.com/googlarz/finance-assistant/releases)
+[![tests](https://img.shields.io/badge/tests-1%2C226%20passing-brightgreen)](#running-tests)
 [![tax cases](https://img.shields.io/badge/tax%20law-29%20official%20cases-success)](#locales)
 [![locales](https://img.shields.io/badge/locales-DE·UK·US·FR·NL·PL-orange)](#locales)
 [![local-first](https://img.shields.io/badge/local--first-no%20cloud-black)](#security--privacy)
@@ -234,7 +234,7 @@ Then start a session: `What's my financial health?`
 ### Verify your install
 
 ```bash
-python3 skill.py --version    # finance-assistant 3.9.1
+python3 skill.py --version    # finance-assistant 3.9.2
 python3 skill.py --doctor     # runs health checks on your setup
 ```
 

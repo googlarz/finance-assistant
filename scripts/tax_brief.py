@@ -78,6 +78,65 @@ def build_brief(profile: Optional[dict] = None, year: Optional[int] = None) -> d
     }
 
 
+def _first(*vals):
+    """Return the first value that is a non-zero number, else None."""
+    for v in vals:
+        try:
+            if v is not None and float(v) != 0:
+                return float(v)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _extract_amounts(est: dict) -> dict:
+    """Normalize the wildly different locale return shapes into common rows.
+
+    Locales don't share a key schema: DE nests everything under `breakdown`
+    (estimated_tax, zu_versteuerndes_einkommen, soli); US returns flat keys
+    (federal_income_tax, gross_income, social_security_tax + medicare_tax).
+    This maps whatever's present into a labelled, ordered list of rows.
+    """
+    b = est.get("breakdown", {}) if isinstance(est.get("breakdown"), dict) else {}
+
+    gross = _first(est.get("gross"), est.get("gross_income"), b.get("gross_income"))
+    taxable = _first(est.get("taxable_income"), b.get("zu_versteuerndes_einkommen"), b.get("taxable_income"))
+    income_tax = _first(est.get("tax"), est.get("federal_income_tax"), b.get("estimated_tax"), b.get("income_tax"))
+    soli = _first(est.get("soli"), b.get("soli"))
+    # US splits social into SS + Medicare; DE has social contributions in breakdown
+    social = _first(
+        est.get("social"),
+        b.get("social_contributions"),
+        (float(est.get("social_security_tax", 0) or 0) + float(est.get("medicare_tax", 0) or 0)) or None,
+    )
+    se_tax = _first(est.get("self_employment_tax"))
+    qbi = _first(est.get("qbi_deduction"))
+    net = _first(est.get("net"), b.get("net"))
+    if net is None and gross is not None and income_tax is not None:
+        net = gross - income_tax
+
+    rows = []
+    if gross is not None:    rows.append(("Gross income", gross))
+    if taxable is not None:  rows.append(("Taxable income", taxable))
+    if income_tax is not None: rows.append(("Income tax", income_tax))
+    if soli is not None:     rows.append(("Solidarity surcharge", soli))
+    if se_tax is not None:   rows.append(("Self-employment tax", se_tax))
+    if qbi is not None:      rows.append(("§199A QBI deduction", qbi))
+    if social is not None:   rows.append(("Social contributions", social))
+    if net is not None:      rows.append(("Net (after income tax)", net))
+
+    er = est.get("effective_rate")
+    effective_rate = None
+    if er is not None:
+        try:
+            er = float(er)
+            effective_rate = er * 100 if er <= 1 else er  # fraction → percent
+        except (TypeError, ValueError):
+            pass
+
+    return {"rows": rows, "effective_rate": effective_rate}
+
+
 def render_markdown(brief: dict) -> str:
     """Render the brief as a hand-off markdown document."""
     if brief.get("error"):
@@ -101,22 +160,17 @@ def render_markdown(brief: dict) -> str:
     L.append("")
 
     # ── Computed estimate ──
+    amounts = _extract_amounts(est)
     L.append("## Computed tax estimate")
     L.append("")
     L.append("| Item | Amount |")
     L.append("|------|-------:|")
-    for key, label in [
-        ("gross", "Gross income"),
-        ("taxable_income", "Taxable income"),
-        ("tax", "Income tax"),
-        ("soli", "Solidarity surcharge / surtax"),
-        ("social", "Social contributions"),
-        ("net", "Net (after tax)"),
-    ]:
-        if key in est and est[key]:
-            L.append(f"| {label} | {format_money(float(est[key]), cur)} |")
-    if est.get("effective_rate"):
-        L.append(f"| Effective rate | {est['effective_rate']:.1f}% |")
+    for label, val in amounts["rows"]:
+        L.append(f"| {label} | {format_money(float(val), cur)} |")
+    if amounts["effective_rate"] is not None:
+        L.append(f"| Effective rate | {amounts['effective_rate']:.1f}% |")
+    if not amounts["rows"]:
+        L.append("| _no figures on record — add income/employment to your profile_ | |")
     L.append("")
 
     # ── Rules applied (the "real law" provenance) ──
