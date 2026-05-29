@@ -297,3 +297,56 @@ def test_format_household_summary_settle_up_instructions():
     assert "→" in text  # settle-up arrow present
     assert "alice" in text
     assert "bob" in text
+
+
+# ── Shared goals (#10) ──────────────────────────────────────────────────────
+
+def test_add_shared_goal():
+    from household import create_household, add_shared_goal, get_shared_goals
+
+    create_household("Flat", ["alice", "bob"])
+    goal = add_shared_goal("Holiday fund", 3000.0, target_date="2026-12-01")
+    assert goal["target_amount"] == 3000.0
+    assert goal["current_amount"] == 0.0
+    goals = get_shared_goals()
+    assert len(goals) == 1
+    assert goals[0]["name"] == "Holiday fund"
+
+
+def test_add_shared_goal_without_household_raises():
+    from household import add_shared_goal
+
+    with pytest.raises(ValueError):
+        add_shared_goal("Holiday", 1000.0)
+
+
+def test_contribute_to_goal_tracks_per_member():
+    from household import create_household, add_shared_goal, contribute_to_goal
+
+    create_household("Flat", ["alice", "bob"])
+    goal = add_shared_goal("Holiday fund", 3000.0)
+    contribute_to_goal(goal["id"], "alice", 500.0)
+    updated = contribute_to_goal(goal["id"], "bob", 300.0)
+    assert updated["current_amount"] == 800.0
+    assert updated["contributions"]["alice"] == 500.0
+    assert updated["contributions"]["bob"] == 300.0
+
+
+def test_contribute_to_unknown_goal_raises():
+    from household import create_household, contribute_to_goal
+
+    create_household("Flat", ["alice"])
+    with pytest.raises(ValueError):
+        contribute_to_goal("nonexistent", "alice", 100.0)
+
+
+def test_shared_goals_appear_in_summary():
+    from household import create_household, add_shared_goal, contribute_to_goal, format_household_summary
+
+    create_household("Flat", ["alice", "bob"])
+    goal = add_shared_goal("Holiday fund", 3000.0)
+    contribute_to_goal(goal["id"], "alice", 750.0)
+    text = format_household_summary()
+    assert "Shared goals" in text
+    assert "Holiday fund" in text
+    assert "25%" in text  # 750/3000

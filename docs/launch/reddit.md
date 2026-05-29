@@ -46,18 +46,16 @@ Title: `Finance Assistant v3.7.1 — a Claude Code skill for personal finance (l
 
 Body:
 
-Released v3.7.1 of Finance Assistant, a Claude Code skill (not web claude.ai — needs the CLI for filesystem access) that turns your `~/.finance/` directory into a personal finance copilot. New in this release:
+Released v3.8.0 of Finance Assistant, a Claude Code skill (not web claude.ai — needs the CLI for filesystem access) that turns your `~/.finance/` directory into a personal finance copilot. New in this release:
 
-- YNAB CSV import (now have 14 bank formats)
-- Recurring subscription detection with double-billing alerts
-- Crypto holdings via CoinGecko
-- Debt avalanche/snowball comparison
-- Encrypted backup with PBKDF2
-- Audit log of every mutation
-- Configurable weekly digest time
-- Sample-data toggle in onboarding
+- Subscription action tracking — flag a sub to cancel, get alerted if it's STILL charging after you flagged it (the "zombie subscription" case)
+- Accountant/Steuerberater filing brief — hand-off doc with computed tax + statutory rules + deduction checklist
+- Sovereignty mode — route through local Ollama for zero data to Anthropic, with an accuracy harness so you can measure the tradeoff yourself
+- Alert suppression transparency — it now tells you when/why alerts were hidden
+- Locale usage telemetry (`--locale-stats`)
+- Shared household goals
 
-Plus a stack of security/integrity fixes from a Codex adversarial review (path traversal, UUID collision, dedup year-boundary, dual-write divergence).
+Previous v3.7.1 added: YNAB import (14 bank formats), subscription detection, crypto via CoinGecko, debt avalanche/snowball, encrypted backup, audit log — plus security fixes from a Codex adversarial review (path traversal, UUID collision, dedup year-boundary).
 
 Demo: https://googlarz.github.io/finance-assistant/
 Repo: https://github.com/googlarz/finance-assistant

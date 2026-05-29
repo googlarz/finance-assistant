@@ -36,6 +36,10 @@ def _shared_expenses_path():
     return _household_dir() / "shared_expenses.json"
 
 
+def _shared_goals_path():
+    return _household_dir() / "shared_goals.json"
+
+
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 def _load_household() -> dict:
@@ -297,6 +301,58 @@ def get_shared_budget_status(budget_month: Optional[str] = None) -> dict:
     }
 
 
+# ── Shared goals ──────────────────────────────────────────────────────────────
+
+def _load_goals() -> list[dict]:
+    data = load_json(_shared_goals_path(), default={"goals": []})
+    return data.get("goals", []) if isinstance(data, dict) else []
+
+
+def _save_goals(goals: list[dict]) -> None:
+    save_json(_shared_goals_path(), {
+        "last_updated": datetime.now().isoformat(),
+        "goals": goals,
+    })
+
+
+def add_shared_goal(name: str, target_amount: float, target_date: Optional[str] = None) -> dict:
+    """Create a household goal that members contribute to together."""
+    household = _load_household()
+    if not household:
+        raise ValueError("No household defined. Create one first with create_household().")
+    goal = {
+        "id": str(uuid.uuid4())[:8],
+        "name": name,
+        "target_amount": round(float(target_amount), 2),
+        "current_amount": 0.0,
+        "target_date": target_date,
+        "currency": household.get("currency", "EUR"),
+        "contributions": {},  # member_id -> total contributed
+        "created_at": datetime.now().isoformat(),
+    }
+    goals = _load_goals()
+    goals.append(goal)
+    _save_goals(goals)
+    return goal
+
+
+def contribute_to_goal(goal_id: str, member: str, amount: float) -> dict:
+    """Record a member's contribution to a shared goal."""
+    goals = _load_goals()
+    for g in goals:
+        if g["id"] == goal_id:
+            amt = round(float(amount), 2)
+            g["contributions"][member] = round(g["contributions"].get(member, 0.0) + amt, 2)
+            g["current_amount"] = round(g["current_amount"] + amt, 2)
+            _save_goals(goals)
+            return g
+    raise ValueError(f"No shared goal with id {goal_id!r}.")
+
+
+def get_shared_goals() -> list[dict]:
+    return _load_goals()
+
+
 def format_household_summary() -> str:
     """
     Plain-text summary: shared spend, who owes what, settle-up instructions.
@@ -345,5 +401,16 @@ def format_household_summary() -> str:
             )
     else:
         lines.append("All balances are settled.")
+
+    # Shared goals
+    goals = _load_goals()
+    if goals:
+        lines.append("")
+        lines.append("Shared goals:")
+        for g in goals:
+            target = g.get("target_amount", 0)
+            current = g.get("current_amount", 0)
+            pct = int(current / target * 100) if target else 0
+            lines.append(f"  {g['name']}: {cur_sym}{current:,.0f} / {cur_sym}{target:,.0f} ({pct}%)")
 
     return "\n".join(lines)

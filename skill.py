@@ -17,7 +17,7 @@ from onboarding import (
     get_resume_message, get_completion_message, get_onboarding_state,
 )
 
-__version__ = "3.7.1"
+__version__ = "3.8.0"
 
 _timeline_ctx: dict = {}
 
@@ -421,6 +421,18 @@ if __name__ == "__main__":
         print(f"  Avalanche saves €{c['interest_saved_by_avalanche']:,.2f} "
               f"and {c['months_saved_by_avalanche']} month(s)")
         print(f"  Recommendation: {c['recommendation']}")
+        sys.exit(0)
+
+    if "--household" in sys.argv:
+        _setup_db()
+        from household import format_household_summary
+        print(format_household_summary())
+        sys.exit(0)
+
+    if "--locale-stats" in sys.argv:
+        _setup_db()
+        from locale_telemetry import format_stats
+        print(format_stats())
         sys.exit(0)
 
     if "--tax-brief" in sys.argv:

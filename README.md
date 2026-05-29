@@ -33,6 +33,10 @@ No subscription. No cloud. No guessing.
 | UK pension: 20 min of Googling carry-forward rules | 3-year carry-forward with HMRC PTM057200, in seconds |
 | Different tool for each country | DE · UK · US · FR · NL · PL — same commands everywhere |
 
+### Why this over a general AI finance assistant?
+
+Any assistant can *talk* about money. The difference is **law-accurate, bracket-correct tax math for six countries**, computed by deterministic code (`locales/<code>/tax_calculator.py`) — not by a model guessing brackets. A general or first-party finance assistant gives you plausible estimates; this applies the actual statute (German EStG §32a, IRS Rev. Proc., HMRC PTM) to your real numbers and shows its work. That per-jurisdiction depth is expensive to build and maintain, which is exactly why a general tool won't — and why this one leans into it. If your country isn't covered, the [scaffold generator](#locales) makes adding it a ~1-evening contribution with source-URL-annotated TODOs.
+
 **See the output in 30 seconds** — [screenshot](#screenshot)
 ```bash
 python3 skill.py --demo       # seed sample data → open ~/.finance/dashboard_demo.html
@@ -128,6 +132,8 @@ npm install -g @musistudio/claude-code-router
 
 # 3. Configure it to route to your local Ollama (see router README)
 ```
+
+**Full recipe + accuracy harness:** [`docs/sovereignty.md`](docs/sovereignty.md) walks through setup and ships a `sovereignty_check.py` harness that measures the local model's tax-reasoning accuracy against the deterministic engine on *your* hardware — so you can see the tradeoff before trusting it, instead of taking this README's word for it.
 
 **Honest tradeoff:** open local models are meaningfully weaker than Claude on multi-step tax reasoning, bracket math, and "explain why" answers. You will get less precise tax calculations and worse advice quality. Use this mode if data sovereignty matters more than answer quality — e.g. when working with confidential client data or during the EU sovereignty audit at your job. For your own personal finances, the privacy gain over the standard local-first model (your data never leaves your machine; only the conversation does) is usually not worth the quality drop.
 

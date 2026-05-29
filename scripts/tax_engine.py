@@ -66,6 +66,11 @@ def calculate_tax_estimate(profile: Optional[dict] = None, year: Optional[int] =
         result = locale.calculate_tax(ctx, year)
         result["locale"] = locale_code
         result["locale_name"] = getattr(locale, "LOCALE_NAME", locale_code.upper())
+        try:
+            from locale_telemetry import record
+            record(locale_code, "tax_estimate")
+        except Exception:
+            pass
         return result
     except (ImportError, AttributeError) as e:
         return {
