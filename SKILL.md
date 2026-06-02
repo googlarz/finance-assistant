@@ -378,6 +378,15 @@ When the user provides a CSV, MT940, OFX, PDF, or image file:
 3. Call `llm_import.ingest_extracted(rows, account_id, currency, dry_run=True)` to preview, show the user the first 5-10, then `dry_run=False` to commit. The extracted rows go through the same sanitize → normalize → categorize → dedupe pipeline as every other import — no special trust.
 This is what makes the skill work with any statement format, not just the 14 bundled parsers.
 
+### Tax What-If Comparisons
+
+When the user asks a comparative tax question — "should I go freelance?", "is married filing jointly better?", "how much does maxing my 401k save?" — use `tax_scenarios.py`. It runs the SAME gross through the real engine under two configurations and shows the delta:
+- `compare_employment_type(gross, year, profile)` — W-2 vs 1099 (SE tax + QBI)
+- `compare_filing_status(gross, year, profile)` — single vs married filing jointly
+- `compare_pretax_contribution(gross, contribution, year, profile)` — with vs without a 401(k)/pension contribution (reports tax saved)
+
+These use locale-accurate bracket math, not estimates — it's the differentiator. Offer to `save(name, comparison)` so the user can revisit it. CLI: `python3 skill.py --tax-compare {employment-type|filing-status|pretax} --gross N`.
+
 ### Investment Tracker
 
 For portfolio questions:

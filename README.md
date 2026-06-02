@@ -121,6 +121,7 @@ Finance Assistant covers the full personal finance lifecycle across 20+ operatin
 | **Net Worth Dashboard** | "where do I stand?" | Net worth with 7-domain health score and trend |
 | **Data Import** | "import this statement" | Any format — 14 parsers fast-path, LLM reads the rest → preview → categorize → dedupe → import |
 | **Scenario Lab** | "should I rent or buy?" | Before/after comparison with multi-year projection |
+| **Tax What-Ifs** | "W-2 vs 1099? single vs joint? max my 401k?" | Same gross, two tax pictures — real bracket math, saveable |
 | **Monte Carlo** | "what's my FIRE confidence?" | 10,000-simulation distribution with p10/p50/p90 outcomes |
 | **Specialist Handoff** | complex case | Structured brief for a Steuerberater or financial adviser |
 | **Shared Household** | "split expenses with my partner" | Shared budget tracking, settlement ledger |
@@ -607,6 +608,7 @@ The privacy statement is shown once:
 |--------|---------|
 | `tax_engine.py` | Country-agnostic interface, delegates to locale plugin via `importlib` |
 | `tax_brief.py` | Accountant/Steuerberater filing brief: computed tax + rules + deduction + doc checklist |
+| `tax_scenarios.py` | Law-accurate what-if comparisons (W-2 vs 1099, single vs MFJ, pre-tax savings), saveable |
 | `locale_telemetry.py` | Privacy-safe record of which locales get used (locale + operation only) |
 | `locale_registry.py` | Rule provenance (source URL, verification date, confidence) |
 | `locale_loader.py` | Dynamic locale import, on-demand skeleton builder for new countries |

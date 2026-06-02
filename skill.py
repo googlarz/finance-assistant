@@ -390,6 +390,57 @@ if __name__ == "__main__":
         _setup_ambient_context()
         sys.exit(0)
 
+    if "--tax-compare" in sys.argv:
+        # --tax-compare {filing-status|employment-type|pretax} --gross N
+        #   [--year Y] [--contribution C] [--save NAME]
+        _setup_db()
+        from tax_scenarios import (
+            compare_filing_status, compare_employment_type,
+            compare_pretax_contribution, format_comparison, save as _save_cmp,
+        )
+        args = sys.argv
+
+        def _arg(flag, default=None, cast=str):
+            for i, a in enumerate(args):
+                if a == flag and i + 1 < len(args):
+                    try:
+                        return cast(args[i + 1])
+                    except ValueError:
+                        return default
+            return default
+
+        kind = _arg("--tax-compare")
+        gross = _arg("--gross", 0.0, float)
+        year = _arg("--year", None, int)
+        contribution = _arg("--contribution", 20000.0, float)
+        save_name = _arg("--save")
+        profile = get_profile() or {}
+        currency = {"de": "EUR", "fr": "EUR", "nl": "EUR", "pl": "PLN",
+                    "uk": "GBP", "us": "USD"}.get(
+            profile.get("tax_profile", {}).get("locale")
+            or profile.get("meta", {}).get("locale", "us"), "USD")
+
+        if not gross:
+            print("Usage: --tax-compare {filing-status|employment-type|pretax} --gross N "
+                  "[--year Y] [--contribution C] [--save NAME]", file=sys.stderr)
+            sys.exit(1)
+
+        if kind == "filing-status":
+            cmp = compare_filing_status(gross, year, profile)
+        elif kind == "employment-type":
+            cmp = compare_employment_type(gross, year, profile)
+        elif kind == "pretax":
+            cmp = compare_pretax_contribution(gross, contribution, year, profile)
+        else:
+            print("Unknown comparison. Use: filing-status | employment-type | pretax", file=sys.stderr)
+            sys.exit(1)
+
+        print(format_comparison(cmp, currency))
+        if save_name:
+            _save_cmp(save_name, cmp, profile)
+            print(f"\n✓ Saved as '{save_name}' — recall with the scenario tools.")
+        sys.exit(0)
+
     if "--backup" in sys.argv:
         from backup import cli_backup
         cli_backup(sys.argv)
