@@ -39,20 +39,18 @@ def compare_salary_packages(
         bav = float(pkg.get("bav_contribution", 0))
 
         try:
-            from tax_engine import calculate_tax
+            from tax_engine import get_tax_summary
             _pkg_profile = deepcopy(profile or get_profile() or {})
             _pkg_profile.setdefault("employment", {})["annual_gross"] = gross
-            _tax = calculate_tax(_pkg_profile, datetime.now().year)
-            if _tax and not _tax.get("error"):
-                _income_tax = _tax.get("income_tax", 0)
-                _social = _tax.get("total_social", _tax.get("social_contributions_total", 0))
-                net = gross - _income_tax - _social + benefits - bav * 0.5
-                _tax_note = f"locale: {_pkg_profile.get('meta', {}).get('locale', 'unknown')}"
+            _s = get_tax_summary(_pkg_profile, datetime.now().year)
+            if _s.get("source") == "engine" and _s.get("net") is not None:
+                net = _s["net"] + benefits - bav * 0.5
+                _tax_note = _s["components"]
             else:
-                raise ValueError("no result")
+                raise ValueError(_s.get("error", "no result"))
         except Exception:
             net = gross * (1 - 0.25 - 0.20) + benefits - bav * 0.5
-            _tax_note = "estimated (25% income tax + 20% social — use tax module for precision)"
+            _tax_note = "estimated (25% income tax + 20% social — set a locale for precise tax)"
 
         projections = []
         for yr in range(projection_years):
@@ -342,22 +340,21 @@ def compare_freelance_vs_employment(
     profile = profile or get_profile() or {}
 
     def _net_for_gross(annual_gross: float, employment_type: str = "employed") -> tuple[float, str]:
-        """Return (net, note) using tax_engine or flat estimate."""
+        """Return (net, note) using the real tax engine, or a flat estimate."""
         try:
-            from tax_engine import calculate_tax
+            from tax_engine import get_tax_summary
             p = deepcopy(profile)
             p.setdefault("employment", {})["annual_gross"] = annual_gross
             p["employment"]["type"] = employment_type
-            result = calculate_tax(p, datetime.now().year)
-            if result and not result.get("error"):
-                income_tax = result.get("income_tax", 0)
-                social = result.get("total_social", result.get("social_contributions_total", 0))
-                return annual_gross - income_tax - social, "locale-specific tax rules"
+            p.setdefault("tax_profile", {})  # locale resolved inside the engine
+            s = get_tax_summary(p, datetime.now().year)
+            if s.get("source") == "engine" and s.get("net") is not None:
+                return s["net"], s["components"]
         except Exception:
             pass
         # Fallback: employed ~45% combined, freelance ~40% (no employer social top-up)
         rate = 0.45 if employment_type == "employed" else 0.40
-        return annual_gross * (1 - rate), "estimated (~40–45% combined tax + social)"
+        return annual_gross * (1 - rate), "estimated (~40–45% combined tax + social — set a locale for precision)"
 
     # Employment scenario
     employed_net, emp_note = _net_for_gross(employed_gross, "employed")

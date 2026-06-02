@@ -80,6 +80,106 @@ def calculate_tax_estimate(profile: Optional[dict] = None, year: Optional[int] =
         }
 
 
+def _num(*vals):
+    """First value coercible to a non-None float, else None."""
+    for v in vals:
+        if v is None:
+            continue
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def get_tax_summary(profile: Optional[dict] = None, year: Optional[int] = None) -> dict:
+    """Normalized, locale-agnostic tax totals for callers that need scalars.
+
+    Locale plugins return wildly different shapes — US uses flat keys
+    (federal_income_tax, social_security_tax), DE nests under `breakdown`
+    (estimated_tax, total_tax_due, soli). Consumers that hand-read keys (the
+    scenario engine did) silently miss them and fall back to crude guesses.
+    This is the ONE place that normalization lives.
+
+    Returns:
+        {
+          locale, year,
+          gross,            # gross income used
+          income_tax,       # income-tax component (always populated when computable)
+          payroll_tax,      # employee social/payroll where the estimate includes it (US), else None
+          total_tax,        # locale's complete tax figure (income + payroll/soli/etc.)
+          net,              # gross - total_tax
+          effective_rate,   # 0..1
+          components,       # human note on what total_tax includes for this locale
+          source,           # "engine"
+          error?            # present only on failure
+        }
+    """
+    est = calculate_tax_estimate(profile, year)
+    if est.get("error"):
+        return {"error": est["error"], "locale": est.get("locale"), "source": "error"}
+
+    b = est.get("breakdown", {}) if isinstance(est.get("breakdown"), dict) else {}
+    locale = est.get("locale", "")
+
+    gross = _num(est.get("gross"), est.get("gross_income"), b.get("gross_income"))
+
+    # Income tax: US federal_income_tax; DE breakdown.estimated_tax; others `tax`/income_tax
+    income_tax = _num(est.get("tax"), est.get("federal_income_tax"),
+                      b.get("estimated_tax"), b.get("income_tax"))
+
+    # Surtax / solidarity (DE soli, etc.)
+    soli = _num(est.get("soli"), b.get("soli")) or 0.0
+
+    # Employee payroll/social — only where the estimate provides it annually (US SS+Medicare).
+    # DE employee social is NOT in the income-tax estimate; left None (documented in components).
+    ss = _num(est.get("social_security_tax")) or 0.0
+    medi = _num(est.get("medicare_tax")) or 0.0
+    se = _num(est.get("self_employment_tax")) or 0.0
+    payroll_tax = (ss + medi + se) if (ss or medi or se) else None
+
+    # Total tax: prefer the locale's own complete figure, else assemble.
+    total_tax = _num(est.get("total_tax"), b.get("total_tax_due"))
+    if total_tax is None:
+        total_tax = (income_tax or 0.0) + soli + (payroll_tax or 0.0)
+
+    net = (gross - total_tax) if (gross is not None and total_tax is not None) else None
+
+    eff = est.get("effective_rate")
+    effective_rate = None
+    if eff is not None:
+        try:
+            eff = float(eff)
+            effective_rate = eff if eff <= 1 else eff / 100.0
+        except (TypeError, ValueError):
+            pass
+    if effective_rate is None and gross and income_tax is not None and gross > 0:
+        effective_rate = round(income_tax / gross, 4)
+
+    # Honest note on what total_tax covers per locale.
+    if locale == "us":
+        components = "US federal income tax + FICA (Social Security, Medicare)" + (
+            " + self-employment tax" if se else "")
+    elif locale == "de":
+        components = ("DE income tax + Soli (+ church tax where set). NOTE: employee social "
+                      "contributions (pension/health/care/unemployment) are NOT included here.")
+    else:
+        components = f"{locale.upper()} income tax (and surtaxes where applicable)"
+
+    return {
+        "locale": locale,
+        "year": est.get("year") or year,
+        "gross": round(gross, 2) if gross is not None else None,
+        "income_tax": round(income_tax, 2) if income_tax is not None else None,
+        "payroll_tax": round(payroll_tax, 2) if payroll_tax is not None else None,
+        "total_tax": round(total_tax, 2) if total_tax is not None else None,
+        "net": round(net, 2) if net is not None else None,
+        "effective_rate": effective_rate,
+        "components": components,
+        "source": "engine",
+    }
+
+
 def generate_tax_claims(profile: Optional[dict] = None, year: Optional[int] = None, persist: bool = True) -> dict:
     """Generate tax claims using the active locale plugin."""
     profile = profile or get_profile() or {}

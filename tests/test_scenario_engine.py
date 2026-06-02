@@ -1,8 +1,9 @@
 """Tests for scenario_engine.py."""
+import pytest
 from scenario_engine import (
     compare_salary_packages, compare_mortgage_options,
     project_fire_timeline, compare_debt_payoff_vs_invest,
-    compare_rent_vs_buy,
+    compare_rent_vs_buy, compare_freelance_vs_employment,
 )
 
 
@@ -91,3 +92,60 @@ def test_rent_vs_buy():
     assert result["buy"]["monthly_mortgage"] > 0
     assert result["rent"]["total_rent_paid"] > 0
     assert result["years"] == 30
+
+
+# ── Tax wiring (regression: scenarios silently used a crude 25%/20% flat estimate
+#    because they imported a non-existent calculate_tax and read keys no locale returns) ──
+
+def test_get_tax_summary_normalizes_us(isolated_finance_dir):
+    from tax_engine import get_tax_summary
+    p = {"meta": {"locale": "us", "tax_year": 2024},
+         "tax_profile": {"locale": "us", "filing_status": "single"},
+         "employment": {"type": "employed", "annual_gross": 80000}}
+    s = get_tax_summary(p, 2024)
+    assert s["source"] == "engine"
+    assert s["income_tax"] == pytest.approx(9441.0, abs=5)      # real federal income tax
+    assert s["total_tax"] == pytest.approx(15561.0, abs=5)      # + FICA
+    assert s["net"] == pytest.approx(64439.0, abs=5)
+    assert "FICA" in s["components"]
+
+
+def test_get_tax_summary_normalizes_de(isolated_finance_dir):
+    from tax_engine import get_tax_summary
+    p = {"meta": {"locale": "de", "tax_year": 2024},
+         "tax_profile": {"locale": "de"},
+         "employment": {"type": "employed", "annual_gross": 80000}}
+    s = get_tax_summary(p, 2024)
+    assert s["source"] == "engine"
+    # DE income tax on 80k is ~22.4k — must be real, NOT the crude 0.25*80000=20000 guess
+    assert s["income_tax"] == pytest.approx(22431.97, abs=50)
+    assert "social contributions" in s["components"].lower()  # honest about what's excluded
+
+
+def test_salary_comparison_uses_real_engine(isolated_finance_dir):
+    """Net must come from the tax engine, not the 25%/20% flat fallback."""
+    profile = {"meta": {"locale": "us", "tax_year": 2024},
+               "tax_profile": {"locale": "us", "filing_status": "single"}}
+    result = compare_salary_packages(
+        [{"label": "A", "annual_gross": 80000}], profile=profile)
+    pkg = result["packages"][0]
+    # Crude fallback would give 80000*0.55 = 44000. Engine gives ~64.4k.
+    assert pkg["estimated_annual_net"] > 60000
+    assert "estimated (25%" not in pkg["tax_note"]
+    assert "FICA" in pkg["tax_note"]
+
+
+def test_freelance_vs_employment_uses_real_engine(isolated_finance_dir):
+    profile = {"meta": {"locale": "us", "tax_year": 2024},
+               "tax_profile": {"locale": "us", "filing_status": "single"}}
+    r = compare_freelance_vs_employment(80000, 600, 220, 500, profile=profile)
+    # Employed net must be engine-based (~64.4k), not crude 80000*0.55=44000
+    assert r["employment"]["estimated_annual_net"] > 60000
+    assert "estimated (~40" not in r["employment"]["tax_note"]
+    assert r["recommendation"] in ("freelance", "employment")
+
+
+def test_scenario_falls_back_gracefully_without_locale(isolated_finance_dir):
+    """No locale set → crude estimate is acceptable, but must not crash."""
+    result = compare_salary_packages([{"label": "A", "annual_gross": 80000}], profile={})
+    assert result["packages"][0]["estimated_annual_net"] > 0
