@@ -320,6 +320,43 @@ def _setup_digest(weekday: int = 0, hour: int = 9, minute: int = 0) -> None:
         print("(launchctl not found — are you on macOS?)")
 
 
+def _install_skill() -> None:
+    """Register this repo as a Claude Code skill by symlinking it into
+    ~/.claude/skills/finance-assistant. Skills there are auto-discovered —
+    no settings.json edit needed.
+    """
+    import pathlib
+
+    repo = pathlib.Path(__file__).resolve().parent
+    skills_dir = pathlib.Path.home() / ".claude" / "skills"
+    target = skills_dir / "finance-assistant"
+
+    skills_dir.mkdir(parents=True, exist_ok=True)
+
+    # Already correctly installed?
+    if target.exists() or target.is_symlink():
+        try:
+            if target.resolve() == repo:
+                print(f"✓ Already installed — {target} points at this repo.")
+                print("  Start a new Claude Code session and ask: \"What's my financial health?\"")
+                return
+        except OSError:
+            pass
+        print(f"⚠  {target} already exists and points elsewhere:")
+        print(f"     {target} → {target.resolve() if target.is_symlink() else '(a real directory)'}")
+        print(f"   Remove it first if you want to link this clone:  rm '{target}'")
+        return
+
+    try:
+        target.symlink_to(repo, target_is_directory=True)
+        print(f"✓ Installed — symlinked {target} → {repo}")
+        print("  (git pull here updates the skill automatically.)")
+        print("\n  Start a new Claude Code session and ask: \"What's my financial health?\"")
+    except OSError as exc:
+        print(f"⚠  Could not create symlink ({exc}).")
+        print(f"   Manual install: clone or move this repo to {target}")
+
+
 def _setup_ambient_context() -> None:
     """Install a PreCompact hook that injects a compact financial snapshot."""
     import json
@@ -388,6 +425,10 @@ if __name__ == "__main__":
 
     if "--setup-ambient-context" in sys.argv:
         _setup_ambient_context()
+        sys.exit(0)
+
+    if "--install" in sys.argv:
+        _install_skill()
         sys.exit(0)
 
     if "--tax-compare" in sys.argv:

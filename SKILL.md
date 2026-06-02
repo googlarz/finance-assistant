@@ -279,6 +279,7 @@ Finance Assistant can be used directly from the terminal without Claude:
 |---------|-------------|
 | `python3 skill.py` | Show financial health summary (or onboarding prompt for new users) |
 | `python3 skill.py --version` | Print version string |
+| `python3 skill.py --install` | Register this clone as a skill (symlink into ~/.claude/skills/) |
 | `python3 skill.py --doctor` | Run health checks on your setup (Python version, dependencies, DB, locales) |
 | `python3 skill.py --demo` | Seed illustrative sample data and open a demo dashboard at `~/.finance/dashboard_demo.html` |
 | `python3 skill.py --dashboard` | Generate interactive dashboard from your real data at `~/.finance/dashboard.html` |

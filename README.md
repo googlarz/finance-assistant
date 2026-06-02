@@ -205,28 +205,26 @@ If you use Claude on the web or mobile and don't want to install anything, use t
 
 ### Install in Claude Code
 
-Clone the repo and add it as a skill:
+**One line** — clone straight into your skills folder (Claude Code auto-discovers it, no config to edit):
 
 ```bash
-git clone --recurse-submodules https://github.com/googlarz/finance-assistant.git
-cd finance-assistant
-pip install -r requirements.txt
+git clone --recurse-submodules https://github.com/googlarz/finance-assistant.git \
+  ~/.claude/skills/finance-assistant
+pip install -r ~/.claude/skills/finance-assistant/requirements.txt
 ```
 
-Add as a skill in `~/.claude/settings.json`:
+Start a new Claude Code session and ask: **"What's my financial health?"**
 
-```json
-{
-  "skills": [
-    {
-      "name": "finance-assistant",
-      "path": "/path/to/finance-assistant"
-    }
-  ]
-}
+<details>
+<summary>Already cloned somewhere else?</summary>
+
+If you cloned to a dev location (e.g. `~/code/finance-assistant`), register it without moving it:
+
+```bash
+cd /path/to/your/finance-assistant
+python3 skill.py --install     # symlinks it into ~/.claude/skills/ (git pull stays live)
 ```
-
-Then start a session: `What's my financial health?`
+</details>
 
 ### Verify your install
 
