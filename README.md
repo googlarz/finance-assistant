@@ -2,7 +2,7 @@
 
 [![version](https://img.shields.io/badge/version-3.9.2-blue)](https://github.com/googlarz/finance-assistant/releases)
 [![tests](https://img.shields.io/badge/tests-1%2C226%20passing-brightgreen)](#running-tests)
-[![tax cases](https://img.shields.io/badge/tax%20law-29%20official%20cases-success)](#locales)
+[![tax cases](https://img.shields.io/badge/tax%20law-33%20official%20cases-success)](#locales)
 [![locales](https://img.shields.io/badge/locales-DE·UK·US·FR·NL·PL-orange)](#locales)
 [![local-first](https://img.shields.io/badge/local--first-no%20cloud-black)](#security--privacy)
 [![license](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey)](LICENSE)
@@ -275,7 +275,7 @@ Locales are maintained in a separate git submodule at **https://github.com/googl
 | **`pl`** — Poland | Polski Ład reform: 12%/32%, 30k PLN free amount, składka zdrowotna |
 | **`us`** — United States | Federal income tax brackets, standard deduction, self-employment tax + QBI §199A, quarterly estimated-tax deadlines |
 
-DE, FR, NL, PL, and UK are validated against **29 official tax authority test cases** (BMF, HMRC, DGFiP, Belastingdienst, KAS) — run `python3 -m pytest locales/tests/test_validation.py -v`. The US locale ships with unit tests; official IRS reference cases are still being added (contributions welcome).
+All six locales are validated against **33 official tax authority test cases** (BMF, HMRC, DGFiP, Belastingdienst, KAS, IRS) — run `python3 -m pytest locales/tests/test_validation.py -v`. US cases are computed independently from IRS Rev. Proc. 2023-34 and Schedule SE.
 
 New locales can be contributed independently to the locales repository without touching the main skill code. See the [locales repo](https://github.com/googlarz/finance-assistant-locales) for the plugin interface, provenance format, and contribution guide.
 
@@ -615,7 +615,7 @@ The privacy statement is shown once:
 | `locales/fr/` | French locale: quotient familial, décote, CSG/CRDS assiette réduite |
 | `locales/nl/` | Dutch locale: Box 1/2/3, heffingskorting, arbeidskorting, Box 3 uncertainty |
 | `locales/pl/` | Polish locale: Polski Ład 12%/32%, 30k PLN free amount, składka zdrowotna |
-| `locales/validation/` | 29 official test cases (BMF, HMRC, DGFiP, Belastingdienst, KAS) — all pass |
+| `locales/validation/` | 33 official test cases (BMF, HMRC, DGFiP, Belastingdienst, KAS, IRS) — all pass |
 
 ### Data & Simulation
 
@@ -812,7 +812,7 @@ Key test files:
 | `locales/tests/test_de_tax.py` | German income tax, Soli, social contributions, 2024–2026 |
 | `locales/tests/test_fr_tax.py` | French quotient familial, décote, CSG assiette réduite |
 | `locales/tests/test_validation.py` | Official authority validation runner across all 5 locales |
-| `locales/validation/*/` | 29 cases from BMF, HMRC, DGFiP, Belastingdienst, KAS |
+| `locales/validation/*/` | 33 cases from BMF, HMRC, DGFiP, Belastingdienst, KAS, IRS |
 
 ---
 
