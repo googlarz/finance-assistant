@@ -1,7 +1,7 @@
 # Finance Assistant
 
-[![version](https://img.shields.io/badge/version-3.9.2-blue)](https://github.com/googlarz/finance-assistant/releases)
-[![tests](https://img.shields.io/badge/tests-1%2C226%20passing-brightgreen)](#running-tests)
+[![version](https://img.shields.io/badge/version-3.10.0-blue)](https://github.com/googlarz/finance-assistant/releases)
+[![tests](https://img.shields.io/badge/tests-1%2C237%20passing-brightgreen)](#running-tests)
 [![tax cases](https://img.shields.io/badge/tax%20law-33%20official%20cases-success)](#locales)
 [![locales](https://img.shields.io/badge/locales-DE·UK·US·FR·NL·PL-orange)](#locales)
 [![local-first](https://img.shields.io/badge/local--first-no%20cloud-black)](#security--privacy)
@@ -229,7 +229,7 @@ python3 skill.py --install     # symlinks it into ~/.claude/skills/ (git pull st
 ### Verify your install
 
 ```bash
-python3 skill.py --version    # finance-assistant 3.9.2
+python3 skill.py --version    # finance-assistant 3.10.0
 python3 skill.py --doctor     # runs health checks on your setup
 ```
 
@@ -783,7 +783,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the locale plugin spec — adding a n
 ```bash
 # Full suite (main + locales + official validation)
 python3 -m pytest tests/ locales/tests/ locales/validation/ -q
-# 1,208 tests — all modules, all locales, all official tax authority cases
+# 1,237 tests — all modules, all locales, all official tax authority cases
 
 # Main skill only
 python3 -m pytest tests/ -v
