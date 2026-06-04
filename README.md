@@ -203,6 +203,8 @@ Local-first by design. Your data lives only in `.finance/` on your machine — n
 - **Audit log** — every change is recorded; `--audit` shows what happened.
 - **Never stored** — bank credentials, IBANs, card numbers, government IDs, raw documents.
 
+This protects your data **at rest**. By default Claude Code still sends the **conversation** to Anthropic's API — for zero egress, route it through a local model ([Sovereignty mode](docs/sovereignty.md)).
+
 Full detail — encryption parameters, threat model, all controls, known limitations — in [`docs/SECURITY.md`](docs/SECURITY.md).
 
 ---
