@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.11.1 — 2026-06-04
+
+### Conversation experience
+- **Session-open overwhelm fixed**: immediate alerts were looped uncapped — a busy user could open to a wall of lines before saying a word. Now capped at 3, critical-first, with `…and N more — say 'show all alerts'` for the rest. Matches §2's own "pick the 2-3 things that matter."
+- **On-voice guard**: voice-lint test scans all user-facing formatters' string literals (AST — comments/docstrings never trip it) for SKILL.md §2's banned robotic phrases ("Analysis complete", "Confidence: medium", etc.). The code surface where robotic strings can drift in is now locked.
+- **Session-start block marked speak-from, not paste**: SKILL.md §4 now explicitly tells Claude the monitor output is structured input to speak from — never to relay verbatim.
+- **Multi-turn conversation example**: §2 now has a worked 3-turn exchange showing correction and follow-up handled in-voice.
+- **Local-model voice tradeoff**: SKILL.md and `docs/sovereignty.md` now state the two-layer hit — reasoning and voice degrade, numbers don't — with guidance for the local-model path.
+
 ## v3.11.0 — 2026-06-04
 
 ### Onboarding — guiding the user
