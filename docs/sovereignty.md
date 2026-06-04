@@ -3,6 +3,8 @@
 By default Claude Code sends your prompts and file context to Anthropic's API. Your **data on disk** never leaves your machine, but the **conversation** does. For confidential client data, an employer's EU-sovereignty policy, or pure preference, you can route Claude Code through a local model so **nothing leaves your machine**.
 
 > **The honest tradeoff up front:** open local models are meaningfully weaker than Claude at multi-step tax reasoning and "which rule applies" judgment. The deterministic tax math (`locales/<code>/tax_calculator.py`) runs identically regardless of model — but *interpreting your situation* degrades. Don't use this mode for tax-accuracy-critical decisions without verifying. The `sovereignty_check.py` harness below lets you measure the gap yourself.
+>
+> **Two things degrade, one doesn't.** The **numbers** are safe — they come from Python, not the model. What you lose is (1) **reasoning** — picking the right rule for a messy situation — and (2) **voice** — the warmth, the judgment calls, the "I'd go with avalanche" opinions that make this feel like a conversation rather than a calculator. The skill instructs a local model to compensate by leaning harder on the scripts and keeping answers short and plain, but expect a more clipped, less fluent assistant. If the *experience* matters more to you than zero-egress, stay on the default Claude path.
 
 ## Setup
 
