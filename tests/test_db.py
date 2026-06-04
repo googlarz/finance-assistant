@@ -273,3 +273,74 @@ def test_migration_is_idempotent(tmp_path, monkeypatch):
     assert count == 1  # still only one row after second run
     assert not result1["errors"]
     assert not result2["errors"]
+
+
+# ── Legacy DB upgrade (migration ordering) ──────────────────────────────────────
+
+def _make_legacy_v0_db(tmp_path):
+    """Create a pre-`type`-column transactions table with no schema_version row,
+    simulating a DB created before SCHEMA_VERSION 2 shipped."""
+    import sqlite3
+    from db import get_db_path
+    path = get_db_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(path))
+    conn.executescript(
+        """
+        CREATE TABLE transactions (
+            id TEXT PRIMARY KEY,
+            account_id TEXT,
+            date TEXT,
+            amount REAL,
+            currency TEXT,
+            category TEXT,
+            description TEXT,
+            source TEXT,
+            payee TEXT,
+            created_at TEXT
+        );
+        INSERT INTO transactions (id, account_id, date, amount, currency, category, created_at)
+        VALUES ('t1', 'a1', '2026-01-01', -50.0, 'EUR', 'food', '2026-01-01T00:00:00');
+        """
+    )
+    conn.commit()
+    conn.close()
+    return path
+
+
+def test_init_db_upgrades_legacy_db_without_type_column(tmp_path, monkeypatch):
+    """Regression: init_db() must self-heal a v0 DB — add transactions.type,
+    create the type index, and stamp the version — without raising."""
+    monkeypatch.setenv("FINANCE_PROJECT_DIR", str(tmp_path))
+    _make_legacy_v0_db(tmp_path)
+
+    from db import init_db, get_conn, SCHEMA_VERSION
+    init_db()  # must not raise "no such column: type"
+
+    with get_conn() as conn:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(transactions)").fetchall()}
+        assert "type" in cols, "migration did not add transactions.type"
+
+        idx = {r["name"] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index'"
+        ).fetchall()}
+        assert "idx_transactions_type" in idx, "type index not created after migration"
+
+        ver = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
+        assert ver == SCHEMA_VERSION, f"version not stamped: {ver}"
+
+        # Existing row backfilled from amount sign (negative -> expense)
+        t = conn.execute("SELECT type FROM transactions WHERE id='t1'").fetchone()[0]
+        assert t == "expense"
+
+
+def test_init_db_legacy_upgrade_is_idempotent(tmp_path, monkeypatch):
+    """Running init_db() twice on a legacy DB stays clean."""
+    monkeypatch.setenv("FINANCE_PROJECT_DIR", str(tmp_path))
+    _make_legacy_v0_db(tmp_path)
+    from db import init_db, get_conn, SCHEMA_VERSION
+    init_db()
+    init_db()
+    with get_conn() as conn:
+        ver = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
+    assert ver == SCHEMA_VERSION

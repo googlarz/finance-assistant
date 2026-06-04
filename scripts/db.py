@@ -142,6 +142,11 @@ CREATE TABLE IF NOT EXISTS insurance_policies (
     updated_at TEXT NOT NULL
 );
 
+"""
+
+# Indexes are applied AFTER column migrations — some reference columns
+# (e.g. transactions.type) that pre-existing DBs only gain via migration.
+INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_transactions_account ON transactions(account_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category);
@@ -210,14 +215,22 @@ def _migrate_schema(conn, from_version: int) -> None:
 
 
 def init_db() -> None:
-    """Create schema if not exists, apply migrations, stamp version."""
+    """Create tables, apply column migrations, then indexes, then stamp version.
+
+    Order matters: indexes can reference columns that pre-existing DBs only
+    gain via migration (e.g. transactions.type), so they must run last.
+    """
     with get_conn() as conn:
-        # CREATE TABLE IF NOT EXISTS for everything — safe on existing DBs
+        # 1. CREATE TABLE IF NOT EXISTS for everything — safe on existing DBs
         conn.executescript(SCHEMA)
-        # Then apply column-level migrations for existing DBs that pre-date a change
+        # 2. Column-level migrations for existing DBs that pre-date a change
         from_version = _current_schema_version(conn)
         if from_version < SCHEMA_VERSION:
             _migrate_schema(conn, from_version)
+        # 3. Indexes last — now every migrated column exists
+        conn.executescript(INDEXES)
+        # 4. Stamp version only after migrations + indexes succeed
+        if from_version < SCHEMA_VERSION:
             conn.execute(
                 "INSERT OR IGNORE INTO schema_version (version) VALUES (?)",
                 (SCHEMA_VERSION,),

@@ -17,7 +17,7 @@ from onboarding import (
     get_resume_message, get_completion_message, get_onboarding_state,
 )
 
-__version__ = "3.10.0"
+__version__ = "3.10.1"
 
 _timeline_ctx: dict = {}
 
@@ -71,15 +71,21 @@ def get_timeline_context() -> dict:
 def _setup_security_defaults() -> None:
     """Run once-per-session security hygiene: gitignore guard + permission check."""
     try:
-        from data_safety import ensure_gitignore_protection, check_permissions
+        from data_safety import (
+            ensure_gitignore_protection, check_permissions, harden_permissions,
+        )
         ensure_gitignore_protection()
-        result = check_permissions()
-        if result.get("status") == "insecure":
-            # Non-fatal — just surface a hint in the session log
-            print(
-                "[Finance Assistant] Warning: some .finance/ files have loose permissions. "
-                "Run harden_permissions() to restrict access to your OS user only."
-            )
+        if check_permissions().get("status") == "insecure":
+            # Auto-fix rather than nag — harden_permissions() is idempotent.
+            harden_permissions()
+            if check_permissions().get("status") == "insecure":
+                # Couldn't fix it (e.g. odd filesystem) — give an actionable command.
+                print(
+                    "[Finance Assistant] Warning: some .finance/ files have loose "
+                    "permissions and could not be auto-fixed. Run "
+                    "`python3 skill.py --doctor` for details.",
+                    file=sys.stderr,
+                )
     except Exception:
         pass  # Security helpers must never crash the skill
 
@@ -395,7 +401,54 @@ def _setup_ambient_context() -> None:
     print("  Remove by editing hooks.PreCompact in ~/.claude/settings.json")
 
 
+HELP_TEXT = """finance-assistant """ + __version__ + """ — a local-first personal finance copilot for Claude Code
+
+Usage: python3 skill.py [command]
+
+Normally you don't run these by hand — you talk to Claude Code ("What's my
+financial health?"). These flags are for setup, scripting, and automation.
+
+Getting started
+  (no flags)            Run a session (the default — same as talking to Claude)
+  --demo                Try it with realistic sample data
+  --wipe-demo           Remove the sample data
+  --doctor              Verify your setup and report problems
+  --version             Print version
+  --help, -h            Show this help
+  --install             Register this checkout into ~/.claude/skills/
+
+Tax
+  --tax-compare {filing-status|employment-type|pretax} --gross N [--year Y]
+                        [--contribution C] [--save NAME]   Saveable tax what-ifs
+  --tax-brief [--year Y]                                   Filing brief for your accountant
+  --locale-stats                                           Which locales you've used
+
+Money
+  --dashboard                       Net-worth dashboard
+  --debt-strategy [--extra N]       Avalanche vs snowball payoff plan
+  --household                       Shared-household view
+  --subscriptions                   Detected recurring charges
+  --flag-subscription / --mark-subscription <name>   Track one to cancel
+  --backup / --backup-restore       Encrypted backup of .finance/
+  --audit                           Show the change audit log
+
+Alerts & automation
+  --inbox                           Pending imported files
+  --digest                          Weekly digest now
+  --setup-digest [--day D --time HH:MM]    Schedule the weekly digest
+  --setup-watcher                   Watch an inbox folder for new statements
+  --setup-ambient-context           Inject a finance snapshot on /compact
+  --show-suppressed                 Alerts currently auto-suppressed
+  --alert-stats [--days N]          Alert activity
+  --clear-suppression [--domain D]  Un-suppress alerts
+
+Full docs: https://github.com/googlarz/finance-assistant"""
+
 if __name__ == "__main__":
+    if "--help" in sys.argv or "-h" in sys.argv:
+        print(HELP_TEXT)
+        sys.exit(0)
+
     if "--version" in sys.argv:
         print(f"finance-assistant {__version__}")
         sys.exit(0)

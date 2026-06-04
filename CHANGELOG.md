@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.10.1 — 2026-06-04
+
+### Fixed — Database
+- **Migration ordering bricked DB startup on upgrade**: `init_db()` ran `CREATE INDEX ... ON transactions(type)` (part of the schema script) *before* the column migration that adds `transactions.type`. On any DB created before the `type` column shipped, the index creation threw `no such column: type`, aborting the whole script before the migration could run — so the column was never added, `schema_version` was never stamped, and `Warning: DB bootstrap failed: no such column: type` printed on every command, permanently. Indexes are now applied *after* column migrations, and the version is stamped only after both succeed (self-healing on the next run if anything fails).
+
+### Fixed — Usability
+- **`--help` did nothing**: the hand-rolled CLI had no `--help`/`-h` handler, so it fell through to a default session. Added a grouped usage listing for all commands.
+- **Warnings leaked into normal output**: the bootstrap and permissions warnings printed to the session log on every run. The DB warning is gone (see above); the permissions check now auto-hardens instead of nagging.
+- **Permissions hint referenced an internal function**: the message told users to "Run `harden_permissions()`" (a Python function name). `.finance/` is now auto-hardened on session start; if that fails, the message points to `python3 skill.py --doctor`.
+
 ## v3.2.0 — 2026-04-29
 
 ### Fixed — Financial Correctness
