@@ -17,7 +17,7 @@ from onboarding import (
     get_resume_message, get_completion_message, get_onboarding_state,
 )
 
-__version__ = "3.10.1"
+__version__ = "3.11.0"
 
 _timeline_ctx: dict = {}
 
@@ -90,7 +90,33 @@ def _setup_security_defaults() -> None:
         pass  # Security helpers must never crash the skill
 
 
+def _health_nudge() -> str:
+    """One-line, friendly pointer to --doctor if the install is degraded.
+
+    Only checks the two failure modes that actually strand a new user:
+    missing dependencies and a missing/empty locales submodule (the #1
+    'it doesn't work' cause). Cheap; never raises.
+    """
+    try:
+        from doctor import _check_requirements, _check_locales_submodule
+        for check in (_check_requirements(), _check_locales_submodule()):
+            if check.get("status") == "fail":
+                return (
+                    f"⚠️  Setup looks incomplete — {check['message']}\n"
+                    "Run `python3 skill.py --doctor` to see what's missing and how to fix it.\n\n"
+                )
+    except Exception:
+        pass
+    return ""
+
+
 def main() -> str:
+    """Called at skill load time. Prepends a health nudge if the install
+    is degraded, then returns the greeting/status from the body."""
+    return _health_nudge() + _main_body()
+
+
+def _main_body() -> str:
     """Called at skill load time. Returns initial greeting or status."""
     _setup_db()
     _setup_security_defaults()

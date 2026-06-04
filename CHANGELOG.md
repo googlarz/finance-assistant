@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.11.0 — 2026-06-04
+
+### Onboarding — guiding the user
+- **Load-time health nudge**: if the install is degraded (missing dependencies or an uninitialised `locales/` submodule — the #1 "it doesn't work" cause), every session now opens with a one-line, friendly pointer to `python3 skill.py --doctor` instead of leaving the user stranded. Healthy installs see nothing. New `_health_nudge()` is cheap and never raises (covered by tests).
+- **Demo offered before any real numbers**: the conversational onboarding (SKILL.md) now explicitly offers `--demo` as a no-commitment first step, matching what the programmatic greeting already did — so a user who just talks to Claude gets the try-first path, not only README readers.
+- **Privacy nuance surfaced at onboarding**: privacy-motivated users are now told the two-layer truth up front — data stays on disk, but the *conversation* goes to Anthropic by default unless they run a local model (Sovereignty mode).
+- **claude.ai surface expectations set up front**: the Projects template (`PROJECT_INSTRUCTIONS.md`) now states what works in the browser (conversational math) vs what needs the Claude Code install (file import, SQLite, live prices, Monte Carlo), so users don't hit silent walls.
+
 ## v3.10.1 — 2026-06-04
 
 ### Fixed — Database
