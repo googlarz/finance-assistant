@@ -189,7 +189,7 @@ All six are validated against **33 official tax-authority test cases** (BMF, HMR
 | Bank import · SQLite · subscription detection · live prices | ✅ | ❌ no file/network access |
 | FIRE Monte Carlo · encrypted backup · inbox watcher · weekly digest | ✅ | ❌ needs local compute/launchd |
 
-**Want zero data to Anthropic?** Route Claude Code through a local model (Ollama) — the deterministic tax math is identical; only the reasoning quality drops. Recipe + an accuracy harness you run yourself: [`docs/sovereignty.md`](docs/sovereignty.md).
+**Want zero data to Anthropic?** For full privacy, run Claude Code against a local model: point [claude-code-router](https://github.com/musistudio/claude-code-router) at [Ollama](https://ollama.com) and nothing leaves your machine — not even the conversation. The deterministic tax math is identical; only the reasoning quality drops. Recipe + an accuracy harness you run yourself: [`docs/sovereignty.md`](docs/sovereignty.md).
 
 ---
 
