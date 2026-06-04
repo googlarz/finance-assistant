@@ -137,16 +137,27 @@ def format_monitor_output(context: dict) -> str:
         )
 
     # ── Immediate tier ────────────────────────────────────────────────────────
+    # Cap at the top few so session-open never becomes a wall (SKILL.md §2:
+    # "pick the 2-3 things that actually matter"). Critical before warning.
+    IMMEDIATE_CAP = 3
     immediate = context.get("immediate", [])
     if immediate:
+        immediate = sorted(
+            immediate, key=lambda a: 0 if a.get("urgency") == "critical" else 1
+        )
+        shown, overflow = immediate[:IMMEDIATE_CAP], immediate[IMMEDIATE_CAP:]
         if lines:
             lines.append("")
         lines.append("**Needs attention:**")
-        for a in immediate:
+        for a in shown:
             icon = icons.get(a.get("urgency", "info"), "•")
             lines.append(f"{icon} **{a['title']}** — {a['detail']}")
             if a.get("action"):
                 lines.append(f"   → {a['action']}")
+        if overflow:
+            lines.append(
+                f"   …and {len(overflow)} more — say 'show all alerts' to see everything."
+            )
 
     # ── Digest tier ───────────────────────────────────────────────────────────
     digest = context.get("digest", [])
