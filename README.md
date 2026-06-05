@@ -129,7 +129,7 @@ A conversational copilot across the full personal-finance lifecycle. The highlig
 - **Plan & project** — budgets, savings goals, debt avalanche/snowball, FIRE with 10,000-path Monte Carlo, rent-vs-buy and salary-offer comparisons.
 - **Track wealth** — portfolio allocation/XIRR, live stock + crypto prices, net-worth health score.
 - **Import anything** — 14 bank-CSV formats on a fast path; an unrecognized file (foreign bank, scanned PDF, screenshot) is read by Claude directly, same sanitize→dedupe→confirm pipeline.
-- **Stay ahead** — every session surfaces only what needs attention: budget overspend, upcoming bills, tax deadlines, portfolio drift, zombie subscriptions ("still charging after you flagged it to cancel"), FIRE progress. Stale alerts auto-suppress.
+- **Stay ahead** — every session surfaces only what needs attention: budget overspend, upcoming bills, tax deadlines, portfolio drift, zombie subscriptions ("still charging after you flagged it to cancel"), FIRE progress. Stale alerts auto-suppress. Say `hi` for a one-line proactive check-in — it picks the single most relevant thing and asks you about it.
 - **Own your data** — local SQLite, encrypted backup, append-only audit log of every change, one-command total wipe.
 
 <details>
@@ -141,6 +141,12 @@ Budget Manager · Transaction Logger · Savings Planner · Investment Tracker ·
 ---
 
 ## More conversations
+
+```
+You:  hi
+FA:   Hey — you've paid off 50% of the credit card. That's the halfway mark.
+      Sticking with the current plan or want to revisit?
+```
 
 ```
 You:  Best strategy to pay off my 3 loans?
