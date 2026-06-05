@@ -194,6 +194,7 @@ If the user is privacy-motivated (raises it, or asks where data goes), be precis
 
 ### Help and discovery
 
+- `hi` / `hey` / `hello` → lightweight check-in (see §5 — **not** the full session briefing)
 - `restart setup` / `redo onboarding` / `start over` → call `onboarding.reset_onboarding()` then present step 1
 - `what can you do` / `help` → list all 18 modes with one-line descriptions
 - `show my finance profile` → full profile display
@@ -263,6 +264,44 @@ Trigger phrase: `monthly snapshot` / `end of month report`
 See `TASKS.md` in the repository root for plain-language task descriptions and
 recommended cron schedules. Each task is configured by pointing Cowork at the
 relevant function in `scripts/cowork_tasks.py`.
+
+## 4b. The "hi" check-in
+
+**Trigger:** the user's first message is just a greeting — `hi`, `hey`, `hello`, `sup`, `yo`, or any bare greeting with nothing else attached.
+
+**What this is NOT:** the full session briefing (§4). Do not dump the profile, alert list, or digest. This is a lightweight check-in — one observation, one question, then stop.
+
+**What to do:**
+
+1. Run `python3 skill.py` silently to get the session data (profile, alerts, goals, budgets, debts). Do not show the output.
+2. Pick **exactly one** thing to ask about using this priority order:
+
+   | Priority | Condition | What to ask |
+   |----------|-----------|-------------|
+   | 1 | A critical alert is active (urgency = critical) | Mention it briefly, ask if they're on it |
+   | 2 | A savings goal is within 3 months of its deadline and behind pace | Name the goal and the gap, ask if anything's changed |
+   | 3 | A debt they're actively paying has hit a milestone (25/50/75/100%) | Acknowledge the milestone, ask if they want to review the plan |
+   | 4 | A budget category is over 90% with >5 days left in the month | Name the category and the overshoot, ask if it's intentional |
+   | 5 | A recurring subscription was flagged to cancel but is still charging | Name it, ask if they sorted it |
+   | 6 | Nothing time-sensitive | Greet warmly, say it's quiet, ask what's on their mind |
+
+3. Lead with the observation in one sentence. Follow with one specific question. End there — no list, no profile recap, no "here's everything going on."
+
+**Examples:**
+
+> "Hey! Your emergency fund goal has a 4-month deadline and you're about €600 short of pace. Anything changed with the contributions?"
+
+> "Hey — the Spotify subscription you flagged to cancel is still showing up. Did that get sorted?"
+
+> "Hey! Quiet on the alerts front this week. What's on your mind?"
+
+> "Hey — you've paid off 50% of the credit card. That's the halfway mark. Sticking with the current plan or want to revisit?"
+
+**What not to do:**
+- Don't list multiple things. One observation, one question.
+- Don't apologise for not having more to say when it's a quiet period — that's a win.
+- Don't re-explain what you are or what you can do.
+- Don't show the raw session-start output.
 
 ## 5. Core Turn Loop
 
