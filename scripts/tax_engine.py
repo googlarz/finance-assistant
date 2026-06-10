@@ -61,8 +61,12 @@ def calculate_tax_estimate(profile: Optional[dict] = None, year: Optional[int] =
         try:
             from locales.context import LocaleContext
             ctx = LocaleContext.from_finance_profile(profile, tax_year=year)
-        except (ImportError, Exception):
+        except ImportError:
             ctx = profile  # fallback to dict for locales that handle it
+        except Exception as e:
+            import sys
+            print(f"Warning: LocaleContext build failed for '{locale_code}': {e}", file=sys.stderr)
+            ctx = profile
         result = locale.calculate_tax(ctx, year)
         result["locale"] = locale_code
         result["locale_name"] = getattr(locale, "LOCALE_NAME", locale_code.upper())
@@ -72,7 +76,7 @@ def calculate_tax_estimate(profile: Optional[dict] = None, year: Optional[int] =
         except Exception:
             pass
         return result
-    except (ImportError, AttributeError) as e:
+    except (ImportError, AttributeError, ValueError) as e:
         return {
             "error": f"Locale '{locale_code}' not available or incomplete: {e}",
             "locale": locale_code,
@@ -124,45 +128,75 @@ def get_tax_summary(profile: Optional[dict] = None, year: Optional[int] = None) 
 
     gross = _num(est.get("gross"), est.get("gross_income"), b.get("gross_income"))
 
-    # Income tax: US federal_income_tax; DE breakdown.estimated_tax; others `tax`/income_tax
-    income_tax = _num(est.get("tax"), est.get("federal_income_tax"),
+    # Income tax: FR/PL use top-level `income_tax`; UK uses `tax`; US uses `federal_income_tax`;
+    # DE nests under `breakdown.estimated_tax`. Check all locations in priority order.
+    income_tax = _num(est.get("tax"), est.get("income_tax"), est.get("federal_income_tax"),
                       b.get("estimated_tax"), b.get("income_tax"))
 
-    # Surtax / solidarity (DE soli, etc.)
+    # Surtax / solidarity (DE soli, FR prélèvements sociaux treated separately below, etc.)
     soli = _num(est.get("soli"), b.get("soli")) or 0.0
 
     # Employee payroll/social — only where the estimate provides it annually (US SS+Medicare).
-    # DE employee social is NOT in the income-tax estimate; left None (documented in components).
+    # DE employee social is NOT in the income-tax estimate; queried separately via social_tax below.
     ss = _num(est.get("social_security_tax")) or 0.0
     medi = _num(est.get("medicare_tax")) or 0.0
     se = _num(est.get("self_employment_tax")) or 0.0
     payroll_tax = (ss + medi + se) if (ss or medi or se) else None
 
-    # Total tax: prefer the locale's own complete figure, else assemble.
+    # FR: prélèvements sociaux (CSG/CRDS) are part of the total but reported separately.
+    prelevements = _num(est.get("prelevements_sociaux"), b.get("prelevements_sociaux")) or 0.0
+
+    # Total tax: prefer the locale's own complete figure, then gross-net, then assemble.
     total_tax = _num(est.get("total_tax"), b.get("total_tax_due"))
+    if total_tax is None and gross is not None and _num(est.get("net")) is not None:
+        total_tax = gross - _num(est.get("net"))
     if total_tax is None:
-        total_tax = (income_tax or 0.0) + soli + (payroll_tax or 0.0)
+        total_tax = (income_tax or 0.0) + soli + prelevements + (payroll_tax or 0.0)
 
     net = (gross - total_tax) if (gross is not None and total_tax is not None) else None
 
-    eff = est.get("effective_rate")
+    # Always compute effective_rate from the normalized total_tax so it reflects full burden.
+    # Locale-provided rates often cover only income tax; total_tax now includes NI/ZUS/CSG.
     effective_rate = None
-    if eff is not None:
+    if gross and total_tax is not None and gross > 0:
+        effective_rate = round(total_tax / gross, 4)
+    elif est.get("effective_rate") is not None:
         try:
-            eff = float(eff)
+            eff = float(est["effective_rate"])
             effective_rate = eff if eff <= 1 else eff / 100.0
         except (TypeError, ValueError):
             pass
-    if effective_rate is None and gross and income_tax is not None and gross > 0:
-        effective_rate = round(income_tax / gross, 4)
+
+    # Social contributions beyond what's in total_tax: query separately for locales that track them.
+    social_tax: Optional[float] = None
+    try:
+        if locale and gross:
+            locale_mod = _load_locale(locale)
+            fn = getattr(locale_mod, "get_social_contributions", None)
+            if fn is not None and locale not in ("us",):  # US FICA already in total_tax
+                sc = fn(gross, year or datetime.now().year)
+                sc_total = _num(sc.get("total"))
+                if sc_total is not None and sc_total > 0:
+                    social_tax = round(sc_total, 2)
+    except Exception:
+        pass
+
+    # total_burden = total_tax + social contributions not already counted.
+    # For US, social is already in total_tax so total_burden == total_tax.
+    total_burden = None
+    if total_tax is not None:
+        extra_social = social_tax if (social_tax is not None and locale not in ("us",)) else 0.0
+        total_burden = round(total_tax + extra_social, 2)
 
     # Honest note on what total_tax covers per locale.
     if locale == "us":
         components = "US federal income tax + FICA (Social Security, Medicare)" + (
             " + self-employment tax" if se else "")
     elif locale == "de":
-        components = ("DE income tax + Soli (+ church tax where set). NOTE: employee social "
-                      "contributions (pension/health/care/unemployment) are NOT included here.")
+        components = ("DE income tax + Soli (+ church tax where set). "
+                      "total_burden adds employee social contributions (pension/health/care/unemployment).")
+    elif locale == "fr":
+        components = "FR income tax (IR) + prélèvements sociaux (CSG/CRDS)"
     else:
         components = f"{locale.upper()} income tax (and surtaxes where applicable)"
 
@@ -173,6 +207,8 @@ def get_tax_summary(profile: Optional[dict] = None, year: Optional[int] = None) 
         "income_tax": round(income_tax, 2) if income_tax is not None else None,
         "payroll_tax": round(payroll_tax, 2) if payroll_tax is not None else None,
         "total_tax": round(total_tax, 2) if total_tax is not None else None,
+        "social_tax": social_tax,
+        "total_burden": total_burden,
         "net": round(net, 2) if net is not None else None,
         "effective_rate": effective_rate,
         "components": components,
@@ -279,6 +315,8 @@ def get_available_locales() -> list[dict]:
         for entry in sorted(os.listdir(locales_dir)):
             init_path = os.path.join(locales_dir, entry, "__init__.py")
             if os.path.isfile(init_path):
+                if entry not in ALLOWED_LOCALES:
+                    continue
                 try:
                     locale = _load_locale(entry)
                     available.append({

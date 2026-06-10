@@ -1,5 +1,23 @@
 # Changelog
 
+## v3.12.0 — 2026-06-10
+
+### Fixed — Tax correctness
+
+- **FR `income_tax` was silently None**: `get_tax_summary()` looked for `tax`/`federal_income_tax`/`breakdown.income_tax` but FR returns `income_tax` at the top level. The key was never picked up, leaving `income_tax: None` and `total_tax: 0` for all French users. Fixed by including `est.get("income_tax")` in the normaliser chain.
+- **FR/UK/PL `total_tax` understated burden**: When a locale's `calculate_tax()` returns `net` but no `total_tax` key, `get_tax_summary()` now falls back to `gross − net` before assembling from components. This captures UK NI (£2,994 for £50k), FR prélèvements sociaux (€4,288 for €45k), and PL ZUS + health (PLN 17,180 for PLN 80k) that were previously missing from `total_tax`.
+- **DE social contributions hidden from total burden**: `get_tax_summary()` now adds `social_tax` (employee pension/health/care/unemployment contributions from `get_social_contributions()`) and `total_burden` (= `total_tax + social_tax`) to every response. For €60k German gross, `total_burden` is ~€26,478 vs the previously reported `total_tax` of ~€14,148 — the full 44% real burden vs a misleading 24%.
+- **`effective_rate` reflected income-tax-only**: Rate is now always `total_tax / gross`, consistent with what `total_tax` now captures. Previously it used the locale's own rate, which for FR/PL was just income tax over gross (FR: 12% vs actual 22%; PL: 5% vs actual 27%).
+- **`get_available_locales()` crashed on `tests/` directory**: The function scanned `locales/` and tried to load every subdirectory with an `__init__.py` as a locale, including the `tests/` package, raising `ValueError: Unknown locale 'tests'`. Now skips entries not in `ALLOWED_LOCALES`.
+- **Unknown locale raised `ValueError` instead of returning error dict**: `_load_locale()` raised `ValueError` for unrecognised codes but the caller only caught `ImportError`/`AttributeError`. Added `ValueError` to the catch so all unknown-locale paths return a structured error dict.
+- **PL missing `CURRENCY` constant**: `locales/pl/__init__.py` was the only locale without `CURRENCY`. Added `CURRENCY = "PLN"`.
+- **`LocaleContext` build failures swallowed silently**: The `except (ImportError, Exception)` that falls back to a raw dict now logs a `Warning:` line to stderr before falling back. This surfaces unexpected crashes during context construction instead of silently producing wrong answers.
+
+### Tests (+107)
+
+- `tests/test_tax_engine.py` (new, 35 tests): direct tests for `get_tax_summary()` parametrised across all 6 locales — required keys, numeric sanity, `net == gross − total_tax`, `effective_rate ∈ (0, 1)`, locale-specific correctness (FR income_tax not None, DE social_tax present, UK/PL/FR total_tax includes contributions), error path.
+- `locales/tests/test_cross_locale_contract.py` (new, 72 tests): cross-locale interface contract — every locale must expose `calculate_tax`, `get_tax_rules`, `get_filing_deadlines`, `generate_tax_claims`, `get_social_contributions`, and the four metadata constants.
+
 ## v3.11.1 — 2026-06-04
 
 ### Conversation experience
