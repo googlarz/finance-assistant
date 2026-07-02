@@ -154,13 +154,48 @@ def generate(code: str, locale_name: str, currency: str, *, dry_run: bool = Fals
         LOCALE_CODE = "{code_lower}"
         LOCALE_NAME = "{locale_name}"
         SUPPORTED_YEARS = [2024, 2025, 2026]
+        CURRENCY = "{currency}"
+
+
+        # The three stubs below satisfy the cross-locale contract test
+        # (locales/tests/test_cross_locale_contract.py). Replace each TODO
+        # with real, sourced values before submitting the locale.
+
+        def get_filing_deadlines(year: int) -> list[dict]:
+            \"\"\"Return filing deadlines. TODO: replace with real dates + official source.\"\"\"
+            return [
+                {{
+                    "type": "standard",
+                    "deadline": f"{{year + 1}}-04-30",  # TODO: real deadline
+                    "label": f"TODO: verify official filing deadline for {{year}}",
+                }},
+            ]
+
+
+        def get_social_contributions(gross: float, year: int) -> dict:
+            \"\"\"Return employee social contribution breakdown.
+            TODO: implement with real rates from the social security authority.\"\"\"
+            rate = get_tax_year_rules(year).get("social_contribution_rate", 0.0)
+            total = round(gross * rate, 2)
+            return {{"total": total, "rate": rate, "note": "TODO: itemize real contributions"}}
+
+
+        def generate_tax_claims(ctx, year: int = None) -> list[dict]:
+            \"\"\"Discover applicable deduction/credit claims.
+            TODO: implement locale-specific claim rules.\"\"\"
+            return []
+
 
         __all__ = [
             "LOCALE_CODE",
             "LOCALE_NAME",
             "SUPPORTED_YEARS",
+            "CURRENCY",
             "calculate_tax",
             "get_tax_rules",
+            "get_filing_deadlines",
+            "get_social_contributions",
+            "generate_tax_claims",
         ]
         """, dry_run=dry_run)
 

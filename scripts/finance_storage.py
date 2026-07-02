@@ -257,7 +257,11 @@ def load_from_db(table: str, filters: dict | None = None) -> list[dict]:
         with get_conn() as conn:
             rows = conn.execute(f"SELECT * FROM {table}{where}", params).fetchall()
             return [dict(r) for r in rows]
-    except Exception:
+    except ImportError:
+        return []  # DB layer not installed — JSON fallback path
+    except Exception as exc:
+        import sys
+        print(f"Warning: DB read from '{table}' failed: {exc}", file=sys.stderr)
         return []
 
 
@@ -284,7 +288,11 @@ def save_to_db(table: str, data: dict, pk_col: str = "id") -> bool:
         with get_conn() as conn:
             conn.execute(sql, [data[c] for c in cols])
         return True
-    except Exception:
+    except ImportError:
+        return False  # DB layer not installed — JSON fallback path
+    except Exception as exc:
+        import sys
+        print(f"Warning: DB write to '{table}' failed: {exc}", file=sys.stderr)
         return False
 
 

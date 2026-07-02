@@ -490,6 +490,12 @@ For what-if comparisons, always show:
 
 > **Note:** The US locale covers **federal income tax only** — state and local taxes (SALT), AMT, and QBI deductions are not modeled. For state tax questions, refer the user to their state's revenue department or a CPA.
 
+**Quoting totals — use the right field from `get_tax_summary()`:**
+- `total_tax` = income tax + surtaxes (and NI/ZUS/CSG where the locale folds them in)
+- `total_burden` = `total_tax` + employee social contributions not already counted (pension/health/care/unemployment)
+- When the user asks "how much do I really pay?", "total deductions?", or anything about take-home, quote **`total_burden`** and say what it includes (the `components` field spells it out). Quoting `total_tax` alone for a German user hides ~half their real deduction.
+- `effective_rate` is `total_tax / gross`. If you cite a burden-based rate, compute `total_burden / gross` and label it "total burden rate".
+
 Delegate to locale plugin. For German locale:
 - Load `locales/de/` modules
 - Use the same deduction discovery, filing prep, and Bescheid review as TaxDE

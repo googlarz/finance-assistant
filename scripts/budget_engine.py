@@ -108,8 +108,9 @@ def create_budget(
                                currency = excluded.currency""",
                         (month_key, cat, float(limit_val), currency),
                     )
-        except Exception:
-            pass
+        except Exception as exc:
+            import sys
+            print(f"Warning: budget SQLite write failed (JSON backup still saved): {exc}", file=sys.stderr)
 
     save_json(get_budget_path(year, month), budget)
     return budget
@@ -141,8 +142,9 @@ def get_budget(year: int, month: Optional[int] = None) -> Optional[dict]:
                     "category_limits": limits,
                     "actuals": actuals,
                 }
-        except Exception:
-            pass
+        except Exception as exc:
+            import sys
+            print(f"Warning: budget SQLite read failed, falling back to JSON: {exc}", file=sys.stderr)
     return load_json(get_budget_path(year, month))
 
 
@@ -162,8 +164,9 @@ def update_actual(month: str, category: str, amount: float) -> bool:
                     (round(amount, 2), month, category),
                 )
             return True
-        except Exception:
-            pass
+        except Exception as exc:
+            import sys
+            print(f"Warning: budget actual update failed for '{category}': {exc}", file=sys.stderr)
     return False
 
 
@@ -193,8 +196,9 @@ def get_variance(month: str) -> list[dict]:
                 }
                 for r in rows
             ]
-        except Exception:
-            pass
+        except Exception as exc:
+            import sys
+            print(f"Warning: budget variance SQLite read failed, falling back to JSON: {exc}", file=sys.stderr)
     # JSON fallback: parse the month key
     parts = month.split("-")
     year = int(parts[0])

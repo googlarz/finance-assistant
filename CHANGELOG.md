@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.13.0 — 2026-07-02
+
+### Conversation
+- **SKILL.md now tells Claude to quote `total_burden`**: for "how much do I really pay?" questions, the answer uses `total_burden` (income tax + all employee social contributions) with its `components` note — not `total_tax`, which for a German user hides ~half the real deduction. Burden-based rates are labelled "total burden rate".
+
+### Importers
+- **Direct end-to-end importer tests** (`tests/test_importers.py`, 20 tests): whole-file parses for MT940 (debit/credit signs, ISO dates, currency), SGML-style OFX (amounts, timestamps, FITID refs), generic CSV, and PDF helpers. Includes malformed-input robustness — garbage/empty/binary files return empty lists instead of crashing — and a CSV formula-injection regression guard.
+
+### Locale scaffold
+- **`scaffold_locale.py` now emits contract-conforming stubs**: generated locales include `CURRENCY` plus working `get_filing_deadlines`, `get_social_contributions`, and `generate_tax_claims` stubs, so a fresh scaffold passes `locales/tests/test_cross_locale_contract.py` out of the box. Contributed locales can no longer silently miss interface functions.
+
+### Error visibility (money paths)
+- **`finance_storage.load_from_db` / `save_to_db`**: real DB errors now print a stderr warning instead of silently returning `[]`/`False` (previously a DB failure was indistinguishable from "no data"). Missing-DB-layer `ImportError` stays silent — that's the supported JSON fallback.
+- **`budget_engine`**: all four silent `except Exception: pass` blocks (dual-write, read, actual-update, variance) now warn on stderr before falling back.
+- **`net_worth_engine`**: failed currency conversions no longer silently sum raw amounts — a stderr warning (once per currency pair) states that net worth mixes currencies. Conversion fallback logic consolidated into one `_to_primary()` helper.
+
 ## v3.12.0 — 2026-06-10
 
 ### Fixed — Tax correctness

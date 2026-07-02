@@ -47,42 +47,40 @@ def calculate_net_worth() -> dict:
     except Exception:
         _convert = False
 
+    _warned_pairs: set = set()
+
+    def _to_primary(amount: float, cur: str) -> float:
+        """Convert to primary currency; warn (once per pair) and use raw on failure."""
+        if not _convert or cur == _primary_currency:
+            return amount
+        try:
+            return convert(amount, cur, _primary_currency)
+        except Exception as exc:
+            if (cur, _primary_currency) not in _warned_pairs:
+                _warned_pairs.add((cur, _primary_currency))
+                import sys
+                print(f"Warning: {cur}→{_primary_currency} conversion failed, "
+                      f"net worth mixes currencies: {exc}", file=sys.stderr)
+            return amount
+
     cash_assets = 0.0
     for a in accounts:
         if a.get("is_asset", True) and a.get("include_in_net_worth", True):
             bal = float(a.get("current_balance", 0))
-            acct_currency = a.get("currency", _primary_currency)
-            if _convert and acct_currency != _primary_currency:
-                try:
-                    bal = convert(bal, acct_currency, _primary_currency)
-                except Exception:
-                    pass  # use raw if conversion fails
-            cash_assets += bal
+            cash_assets += _to_primary(bal, a.get("currency", _primary_currency))
 
     cash_liabilities = 0.0
     for a in accounts:
         if not a.get("is_asset", True) and a.get("include_in_net_worth", True):
             bal = abs(float(a.get("current_balance", 0)))
-            acct_currency = a.get("currency", _primary_currency)
-            if _convert and acct_currency != _primary_currency:
-                try:
-                    bal = convert(bal, acct_currency, _primary_currency)
-                except Exception:
-                    pass
-            cash_liabilities += bal
+            cash_liabilities += _to_primary(bal, a.get("currency", _primary_currency))
 
     # Investments
     portfolio = get_portfolio()
     investment_value = 0.0
     for h in portfolio.get("holdings", []):
         val = float(h.get("current_value", 0))
-        h_currency = h.get("currency", _primary_currency)
-        if _convert and h_currency != _primary_currency:
-            try:
-                val = convert(val, h_currency, _primary_currency)
-            except Exception:
-                pass
-        investment_value += val
+        investment_value += _to_primary(val, h.get("currency", _primary_currency))
 
     # Debts
     debts = get_debts()
