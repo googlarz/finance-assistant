@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"/Users/dawid/Claude Code/Dev/finance-assistant/scripts/hooks/auto_ingest.py\" 2>/dev/null || true"
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/hooks/auto_ingest.py\" 2>/dev/null || true"
           }
         ]
       }
