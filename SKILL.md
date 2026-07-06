@@ -452,7 +452,7 @@ This is what makes the skill work with any statement format, not just the 14 bun
 ### Tax What-If Comparisons
 
 When the user asks a comparative tax question — "should I go freelance?", "is married filing jointly better?", "how much does maxing my 401k save?" — use `tax_scenarios.py`. It runs the SAME gross through the real engine under two configurations and shows the delta:
-- `compare_employment_type(gross, year, profile)` — W-2 vs 1099 (SE tax + QBI)
+- `compare_employment_type(gross, year, profile)` — W-2 vs 1099 (SE tax + QBI). **For US self-employed comparisons above the §199A phase-out threshold (~$182k single / ~$364k MFJ for 2024), ask whether the work is a Specified Service Trade or Business** (consulting, law, health, accounting, financial services, athletics, etc.) and pass it as `tax_profile.extra.is_sstb`. Left unset, the engine assumes non-SSTB and says so in `qbi_note` — but for an actual SSTB above the threshold the real QBI deduction is $0, not the amount shown, which can flip the W-2-vs-1099 recommendation entirely.
 - `compare_filing_status(gross, year, profile)` — single vs married filing jointly
 - `compare_pretax_contribution(gross, contribution, year, profile)` — with vs without a 401(k)/pension contribution (reports tax saved)
 
@@ -488,7 +488,7 @@ For what-if comparisons, always show:
 
 ### Tax Module
 
-> **Note:** The US locale covers **federal income tax only** — state and local taxes (SALT), AMT, and QBI deductions are not modeled. For state tax questions, refer the user to their state's revenue department or a CPA.
+> **Note:** The US locale covers **federal income tax only** — state and local taxes (SALT) and AMT are not modeled. For state tax questions, refer the user to their state's revenue department or a CPA. §199A QBI is modeled including the SSTB phase-out (see above) — the W-2 wages/UBIA cap for high-income non-SSTBs is not implemented and is flagged in `qbi_note` when it may apply.
 
 **Quoting totals — use the right field from `get_tax_summary()`:**
 - `total_tax` = income tax + surtaxes (and NI/ZUS/CSG where the locale folds them in)

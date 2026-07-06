@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.13.1 — 2026-07-06
+
+### Fixed — Tax correctness (critical)
+
+- **QBI SSTB phase-out was never wired up**: `calculate_qbi_deduction()` implements the §199A SSTB phase-out correctly, but `calculate_liability()` never passed `is_sstb` to it — so every self-employed filer got the full 20% QBI deduction regardless of income or trade type. For a consultant/lawyer/advisor (an SSTB) above the phase-out threshold, the real deduction is $0. On $400k self-employed net profit (2025, single), this understated federal tax by **$25,810.78** and flipped the headline "1099 nets +$15,951" comparison to 1099 netting *less* — the exact decision this feature exists to inform.
+- Added `tax_profile.extra.is_sstb` (bool). When it's not set and taxable income is above the phase-out threshold, the engine no longer silently assumes non-SSTB — it says so in the new `qbi_note` field, which SKILL.md now instructs Claude to check and to ask the user about before running a W-2-vs-1099 comparison above ~$182k/$364k (single/MFJ).
+- Reported by [@felciano](https://github.com/felciano) in [#5](https://github.com/googlarz/finance-assistant/issues/5), with a self-contained repro. Thanks for catching this one.
+
+### Merged
+- [#3](https://github.com/googlarz/finance-assistant/pull/3) — `--doctor`'s locale check imported a function that doesn't exist (`locale_registry.list_locales`), so it always reported degraded. Fixed to use `tax_engine.get_available_locales()`. (@felciano)
+- [#4](https://github.com/googlarz/finance-assistant/pull/4) — bulk file imports (CSV/MT940/OFX) dropped `payee`/`tags`, silently breaking subscription detection and merchant analysis for every non-receipt import. (@felciano)
+- [#2](https://github.com/googlarz/finance-assistant/pull/2) — `.claude/settings.json`'s `UserPromptSubmit` hook hardcoded an absolute path, silently no-op-ing the auto-ingest hook on any machine but the original author's. Now uses `$CLAUDE_PROJECT_DIR`. (@astout)
+
+### Tests (+5)
+- `locales/tests/test_locale_us.py`: SSTB above threshold → $0 QBI; non-SSTB above threshold keeps the deduction; unset `is_sstb` above threshold warns in `qbi_note`; below threshold, SSTB status doesn't matter.
+
 ## v3.13.0 — 2026-07-02
 
 ### Conversation
