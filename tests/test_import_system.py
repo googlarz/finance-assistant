@@ -315,3 +315,36 @@ def test_dedup_loads_all_years_in_file(isolated_finance_dir):
         )
     finally:
         os.unlink(f.name)
+
+
+def test_bulk_csv_import_preserves_payee(isolated_finance_dir):
+    """Committed CSV imports must store payee and tags.
+
+    The bulk import loop in import_router used to omit the payee/tags kwargs
+    that the single-receipt path passes, so every CSV-imported transaction was
+    stored with payee=None — silently breaking subscription detection and any
+    merchant-level analysis downstream.
+    """
+    from import_router import import_file
+    from transaction_logger import get_transactions
+
+    csv_content = (
+        "Date,Merchant,Category,Account,Original Statement,Notes,Amount,Tags\n"
+        "2024-03-01,Spotify,Subscriptions,Checking,SPOTIFY P0123,,-9.99,\n"
+        "2024-03-02,Acme Corp,Paycheck,Checking,ACME PAYROLL 0302,,2500.00,\n"
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+    try:
+        result = import_file(
+            f.name, account_id="checking", currency="USD",
+            dry_run=False, keep_original=False,
+        )
+        assert result["imported"] == 2, f"Expected 2 imported, got: {result}"
+
+        stored = get_transactions(account_id="checking", year=2024)
+        payees = {t.get("payee") for t in stored}
+        assert "Spotify" in payees, f"payee lost in bulk import; stored payees: {payees}"
+        assert "Acme Corp" in payees, f"payee lost in bulk import; stored payees: {payees}"
+    finally:
+        os.unlink(f.name)
