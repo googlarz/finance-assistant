@@ -84,8 +84,8 @@ def _check_locales_submodule() -> dict:
 
 def _check_locales() -> dict:
     try:
-        from locale_registry import list_locales
-        locales = list_locales()
+        from tax_engine import get_available_locales
+        locales = [loc["code"] for loc in get_available_locales()]
         return {
             "name": "Locales",
             "status": "ok",
