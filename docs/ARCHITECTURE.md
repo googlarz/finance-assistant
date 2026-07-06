@@ -178,6 +178,18 @@ On first boot after upgrading to v3.0, `skill.py` automatically migrates all exi
 
 `transaction_normalizer.py` maps transactions to 30 categories across 8 domains. `category_learner.py` remembers corrections and applies them to future imports from the same payee — the categorization improves over time.
 
+### Import Assumptions
+
+These aren't enforced anywhere in code — they're implicit in how `import_file()` is built. If you're writing a new format parser or wiring up multi-account handling, read this first.
+
+**One file = one account.** `import_file(file_path, account_id, ...)` takes a single `account_id` and stamps every parsed row with it, no exceptions — this applies identically to the 14 known-format parsers, the generic CSV fallback, and the LLM-extraction path. There is no per-row account resolution anywhere in the import pipeline.
+
+**Multi-account exports are only partially supported.** Three of the 14 bundled formats include a per-row account field in the source file — Mint (`Account Name`), Monarch (`Account`), YNAB (`Account`). Today that column is used **only to detect the format** (it's part of the header fingerprint); it is never read for anything else. Import a multi-account file from one of these sources in a single call, and every transaction — regardless of which of the user's accounts it actually belongs to — is written under whichever single `account_id` you passed in.
+
+**Practical consequence for multi-account files:** either pre-split the source file by account before calling `import_file()`, or import it once per account and filter rows yourself. There's no supported way to hand the whole multi-account export to `import_file()` in one call and get correct per-account attribution.
+
+**This is also why transfers misbehave** ([#6](https://github.com/googlarz/finance-assistant/issues/6)): a transfer between two of the user's own accounts appears in a multi-account export as two rows — one negative, one positive, each tagged with a different `Account` value. Since that column is discarded, both rows land in the same `account_id` looking like unrelated income and expense, instead of netting to zero as an internal transfer. Fixing multi-account attribution and fixing transfer detection are the same piece of work: both need the file's `Account` column to actually mean something once it's parsed, instead of being thrown away after format detection.
+
 ---
 
 ## Module Reference
