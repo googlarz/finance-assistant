@@ -226,6 +226,31 @@ def detect_bank_format(file_path: str) -> Optional[str]:
     return None
 
 
+# Formats whose exports can span multiple user accounts, and the column that says which.
+_ACCOUNT_COLUMNS = {"mint": "Account Name", "monarch": "Account", "ynab": "Account"}
+
+
+def detect_source_accounts(file_path: str, bank_format: Optional[str] = None) -> list[str]:
+    """Distinct account names in a multi-account-capable export (Mint/Monarch/YNAB).
+
+    Returns [] for single-account formats, unreadable files, or when the account
+    column is missing. The import pipeline stamps every row with ONE account_id
+    (see docs/ARCHITECTURE.md "Import Assumptions") — callers use this to warn
+    when a file spans several accounts instead of importing it silently.
+    """
+    bank_format = bank_format or detect_bank_format(file_path)
+    col = _ACCOUNT_COLUMNS.get(bank_format or "")
+    if not col:
+        return []
+    fmt = KNOWN_FORMATS[bank_format]
+    try:
+        with open(file_path, "r", encoding=fmt.get("encoding", "utf-8"), errors="replace") as f:
+            reader = csv.DictReader(f, delimiter=fmt.get("delimiter", ","))
+            return sorted({(row.get(col) or "").strip() for row in reader} - {""})
+    except Exception:
+        return []
+
+
 _CURRENCY_SYMBOLS = re.compile(r"[€$£¥₹₽\s]")
 
 

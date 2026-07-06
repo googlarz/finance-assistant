@@ -438,10 +438,11 @@ When the user provides a CSV, MT940, OFX, PDF, or image file:
 1. Detect format with `import_router.py`
 2. **Preserve the original** — `import_file()` copies it to `~/.finance/originals/YYYY-MM-DD_HH-MM-SS_<filename>` before parsing (default on). Mention this to the user: "Original saved to ~/.finance/originals/". To skip: pass `keep_original=False`.
 3. Parse and show preview (first 5-10 transactions)
-4. Import immediately — do not ask for confirmation unless there are >100 transactions or duplicate risk
-5. Auto-categorize using `transaction_normalizer.py`
-6. Deduplicate against existing transactions
-7. Update account balance and budget actuals
+4. **If the result contains `multi_account_warning`, STOP before committing.** The file (Mint/Monarch/YNAB export) spans multiple accounts, but every row would land in ONE account — and transfers between the user's accounts would import as fake income/expense, corrupting income totals and savings-rate math. Show the user the account list from `multi_account_warning["source_accounts"]` and ask how to proceed: import anyway (they accept the caveat), import only one account's rows (filter the file first), or split by account. Never commit a multi-account file silently.
+5. Otherwise import immediately — do not ask for confirmation unless there are >100 transactions or duplicate risk
+6. Auto-categorize using `transaction_normalizer.py`
+7. Deduplicate against existing transactions
+8. Update account balance and budget actuals
 
 **LLM-native fallback — handle ANY format.** If `import_file()` returns a dict with `needs_llm_extraction: True`, no built-in parser matched (unusual bank, foreign layout, copy-pasted table, scanned PDF, screenshot). Do NOT tell the user it's unsupported. Instead:
 1. Read the content yourself: use `result["raw_text"]` if present; if `result["source"] == "image"`, vision-read the file at `result["file_path"]`.

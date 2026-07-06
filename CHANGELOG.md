@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.14.0 — 2026-07-06
+
+### Import safety — multi-account files no longer corrupt silently
+
+- **Multi-account export detection**: new `csv_importer.detect_source_accounts()` reads the Account column of Mint/Monarch/YNAB exports (the three bundled formats whose files can span several of the user's accounts). When a file covers more than one account, `import_file()` now attaches a `multi_account_warning` to the preview naming every source account and the single `account_id` all rows would land in.
+- **SKILL.md hard-stops on the warning**: Claude must show the account list and ask — import anyway, filter to one account, or split the file — instead of committing a multi-account file silently. Previously the failure mode was invisible: all rows stamped into one account, transfers between the user's own accounts booked as unrelated income/expense (~$60k phantom income on a real-world 2,700-row Monarch export, [#6](https://github.com/googlarz/finance-assistant/issues/6)), discovered only weeks later in the analytics.
+- This is the containment half of [#6](https://github.com/googlarz/finance-assistant/issues/6); per-row account routing + transfer typing remains open there.
+
+### Tests (+5)
+- Multi-account Monarch file → warning with sorted account list; single-account file → no warning; non-multi-account formats (e.g. DKB) → no false positives; end-to-end `import_file()` dry-run carries the warning.
+
 ## v3.13.1 — 2026-07-06
 
 ### Fixed — Tax correctness (critical)

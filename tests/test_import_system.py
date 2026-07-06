@@ -348,3 +348,87 @@ def test_bulk_csv_import_preserves_payee(isolated_finance_dir):
         assert "Acme Corp" in payees, f"payee lost in bulk import; stored payees: {payees}"
     finally:
         os.unlink(f.name)
+
+
+def test_detect_source_accounts_multi_account_monarch():
+    """Monarch export spanning several accounts → all distinct names returned."""
+    from csv_importer import detect_source_accounts
+    csv_content = (
+        "Date,Merchant,Category,Account,Original Statement,Notes,Amount,Tags\n"
+        "2024-03-01,Spotify,Subscriptions,Checking,SPOTIFY,,-9.99,\n"
+        "2024-03-02,Transfer,Transfer,Savings,TRANSFER TO CHECKING,,-500.00,\n"
+        "2024-03-02,Transfer,Transfer,Checking,TRANSFER FROM SAVINGS,,500.00,\n"
+        "2024-03-03,Employer,Paycheck,Checking,PAYROLL,,2500.00,\n"
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+    try:
+        assert detect_source_accounts(f.name) == ["Checking", "Savings"]
+    finally:
+        os.unlink(f.name)
+
+
+def test_detect_source_accounts_single_account_returns_one():
+    from csv_importer import detect_source_accounts
+    csv_content = (
+        "Date,Merchant,Category,Account,Original Statement,Notes,Amount,Tags\n"
+        "2024-03-01,Spotify,Subscriptions,Checking,SPOTIFY,,-9.99,\n"
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+    try:
+        assert detect_source_accounts(f.name) == ["Checking"]
+    finally:
+        os.unlink(f.name)
+
+
+def test_detect_source_accounts_non_multi_format_returns_empty():
+    """A DKB-style (single-account bank) CSV has no account column → []."""
+    from csv_importer import detect_source_accounts
+    csv_content = (
+        '"Buchungsdatum";"Wertstellung";"Betrag (EUR)"\n'
+        '"02.01.2024";"02.01.2024";"-12,99"\n'
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+    try:
+        assert detect_source_accounts(f.name) == []
+    finally:
+        os.unlink(f.name)
+
+
+def test_import_file_warns_on_multi_account_file(isolated_finance_dir):
+    """Dry-run preview of a multi-account Monarch file must carry multi_account_warning."""
+    from import_router import import_file
+    csv_content = (
+        "Date,Merchant,Category,Account,Original Statement,Notes,Amount,Tags\n"
+        "2024-03-01,Spotify,Subscriptions,Checking,SPOTIFY,,-9.99,\n"
+        "2024-03-02,Transfer,Transfer,Savings,TRANSFER,,-500.00,\n"
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+    try:
+        result = import_file(f.name, account_id="checking", currency="USD",
+                             dry_run=True, keep_original=False)
+        warning = result.get("multi_account_warning")
+        assert warning is not None, f"Expected multi_account_warning, got keys: {list(result)}"
+        assert warning["source_accounts"] == ["Checking", "Savings"]
+        assert "checking" in warning["message"]  # names the target account_id
+    finally:
+        os.unlink(f.name)
+
+
+def test_import_file_no_warning_on_single_account_file(isolated_finance_dir):
+    from import_router import import_file
+    csv_content = (
+        "Date,Merchant,Category,Account,Original Statement,Notes,Amount,Tags\n"
+        "2024-03-01,Spotify,Subscriptions,Checking,SPOTIFY,,-9.99,\n"
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+    try:
+        result = import_file(f.name, account_id="checking", currency="USD",
+                             dry_run=True, keep_original=False)
+        assert "multi_account_warning" not in result
+    finally:
+        os.unlink(f.name)

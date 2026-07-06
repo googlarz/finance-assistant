@@ -111,9 +111,22 @@ def import_file(
 
     fmt = format_hint or detect_format(file_path)
 
+    multi_account_warning = None
     if fmt == "csv":
-        from csv_importer import parse_csv
+        from csv_importer import parse_csv, detect_source_accounts
         raw = parse_csv(file_path, currency=currency)
+        source_accounts = detect_source_accounts(file_path)
+        if len(source_accounts) > 1:
+            multi_account_warning = {
+                "source_accounts": source_accounts,
+                "message": (
+                    f"This file spans {len(source_accounts)} accounts "
+                    f"({', '.join(source_accounts[:5])}{'…' if len(source_accounts) > 5 else ''}) "
+                    f"but ALL rows will be imported into '{account_id}'. "
+                    "Transfers between these accounts will appear as unrelated income/expense. "
+                    "Consider splitting the file by account and importing each separately."
+                ),
+            }
     elif fmt == "mt940":
         from mt940_importer import parse_mt940
         raw = parse_mt940(file_path)
@@ -217,6 +230,8 @@ def import_file(
         "dry_run": dry_run,
         "original_saved": original_saved,
     }
+    if multi_account_warning:
+        result["multi_account_warning"] = multi_account_warning
 
     if not dry_run and unique:
         imported = 0
