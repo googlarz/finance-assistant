@@ -229,6 +229,8 @@ def import_file(
                 description=txn.get("description", ""),
                 account_id=account_id,
                 currency=txn.get("currency", currency),
+                payee=txn.get("payee", ""),
+                tags=txn.get("tags", []),
                 import_source=fmt,
                 import_ref=txn.get("import_ref"),
             )
