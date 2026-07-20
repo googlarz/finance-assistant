@@ -15,6 +15,8 @@ A personal finance copilot that applies actual tax statute to your real numbers 
 
 **[→ Live demo](https://googlarz.github.io/finance-assistant/)** — see a real conversation without installing
 
+> Applies real tax statute to your numbers, but it's software, not a licensed advisor — for filing decisions, confirm with a tax professional or your local authority.
+
 ---
 
 ## See it work — real output, not a mockup
@@ -105,18 +107,18 @@ python3 ~/.claude/skills/finance-assistant/skill.py --demo     # try it with sam
 python3 ~/.claude/skills/finance-assistant/skill.py --doctor   # verify your setup
 ```
 
-<details>
-<summary>Already cloned elsewhere? · claude.ai (no install) · Claude Cowork</summary>
+<details open>
+<summary>No terminal? Claude Cowork or claude.ai — nothing to install</summary>
+
+**Claude Cowork:** create a project, add the instruction *"Always load and use the Finance Assistant skill /finance-assistant"*, and ask "What's my financial health?". No git, no terminal, no setup step.
+
+**claude.ai web/mobile (no install):** create a Project and paste [`projects-template/PROJECT_INSTRUCTIONS.md`](projects-template/PROJECT_INSTRUCTIONS.md) into its instructions. Conversational only — the browser can't reach files, so no CSV import, SQLite, live prices, or Monte Carlo. See [Where this runs](#where-this-runs).
 
 **Already cloned to a dev location?** Register it without moving it:
 ```bash
 cd /path/to/your/finance-assistant
 python3 skill.py --install     # symlinks into ~/.claude/skills/ (git pull stays live)
 ```
-
-**claude.ai web/mobile (no install):** create a Project and paste [`projects-template/PROJECT_INSTRUCTIONS.md`](projects-template/PROJECT_INSTRUCTIONS.md) into its instructions. Conversational only — the browser can't reach files, so no CSV import, SQLite, live prices, or Monte Carlo. See [Where this runs](#where-this-runs).
-
-**Claude Cowork:** create a project, add the instruction *"Always load and use the Finance Assistant skill /finance-assistant"*, and ask "What's my financial health?".
 </details>
 
 ---
