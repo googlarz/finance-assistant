@@ -305,3 +305,19 @@ def test_avg_daily_spend_excludes_recurring_category():
         result = _avg_daily_spend("test-checking")
     assert result < 0
     assert abs(result) == pytest.approx(40 * 3 / 90, abs=0.05)
+
+
+def test_avg_daily_spend_excludes_transfers_and_investments():
+    """Issue #7: a negative-amount transfer/investment/debt_payment must not
+    be counted as spend just because its sign is negative."""
+    txns = [
+        {"amount": -40.0, "type": "expense"},           # included
+        {"amount": -5000.0, "type": "transfer"},        # excluded — moving own money
+        {"amount": -1000.0, "type": "investment"},      # excluded — buying assets
+        {"amount": -300.0, "type": "debt_payment"},     # excluded — principal repayment
+    ]
+    with patch("cashflow_forecast.get_transactions", return_value=txns):
+        from cashflow_forecast import _avg_daily_spend
+        result = _avg_daily_spend("test-checking")
+    assert result < 0
+    assert abs(result) == pytest.approx(40 * 3 / 90, abs=0.05)

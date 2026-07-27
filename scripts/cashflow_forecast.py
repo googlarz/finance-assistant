@@ -15,14 +15,14 @@ from typing import Optional
 try:
     from account_manager import get_account
     from recurring_engine import get_upcoming
-    from transaction_logger import get_transactions
+    from transaction_logger import get_transactions, is_expense_flow
     from currency import format_money
 except ImportError:
     import sys
     sys.path.insert(0, os.path.dirname(__file__))
     from account_manager import get_account
     from recurring_engine import get_upcoming
-    from transaction_logger import get_transactions
+    from transaction_logger import get_transactions, is_expense_flow
     from currency import format_money
 
 
@@ -57,10 +57,8 @@ def _avg_daily_spend(account_id: str, months: int = 3) -> float:
                          and t.get("category") != "recurring"
                          and t.get("type") != "recurring"]
         for t in non_recurring:
-            amt = float(t.get("amount", 0))
-            ttype = t.get("type", "")
-            if ttype == "expense" or amt < 0:
-                total_expense += abs(amt)
+            if is_expense_flow(t):
+                total_expense += abs(float(t.get("amount", 0)))
         # Days in that month (approximate)
         total_days += 30
 

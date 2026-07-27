@@ -2,6 +2,7 @@
 from transaction_logger import (
     add_transaction, get_transactions, get_totals,
     get_summary_display, auto_categorize, deduplicate,
+    is_income_flow, is_expense_flow,
 )
 
 
@@ -34,6 +35,47 @@ def test_get_totals(isolated_finance_dir):
     totals = get_totals(year=2026)
     assert totals["food"]["expense"] == 150.0
     assert totals["salary"]["income"] == 3000.0
+
+
+def test_get_totals_excludes_transfers_and_investments(isolated_finance_dir):
+    """Issue #7: transfer/investment/debt_payment rows must not be counted
+    as income or expense by get_totals(), even though their sign matches."""
+    add_transaction("2026-04-01", "expense", -100, "food", "REWE")
+    add_transaction("2026-04-02", "transfer", -5000, "savings", "Move to savings")
+    add_transaction("2026-04-03", "transfer", 5000, "savings", "Move to savings (other leg)")
+    add_transaction("2026-04-04", "investment", -1000, "investment", "Buy ETF")
+    add_transaction("2026-04-05", "debt_payment", -300, "debt_payment", "Mortgage principal")
+    totals = get_totals(year=2026)
+
+    assert totals["food"]["expense"] == 100.0
+    assert totals["savings"]["income"] == 0.0
+    assert totals["savings"]["expense"] == 0.0
+    assert totals["investment"]["income"] == 0.0
+    assert totals["investment"]["expense"] == 0.0
+    assert totals["debt_payment"]["income"] == 0.0
+    assert totals["debt_payment"]["expense"] == 0.0
+
+
+def test_is_income_flow():
+    assert is_income_flow({"type": "income", "amount": 100}) is True
+    assert is_income_flow({"type": "expense", "amount": 100}) is False
+    assert is_income_flow({"type": "transfer", "amount": 100}) is False
+    assert is_income_flow({"type": "investment", "amount": 100}) is False
+    assert is_income_flow({"type": "debt_payment", "amount": 100}) is False
+    # No type set: falls back to sign
+    assert is_income_flow({"amount": 100}) is True
+    assert is_income_flow({"amount": -100}) is False
+
+
+def test_is_expense_flow():
+    assert is_expense_flow({"type": "expense", "amount": -100}) is True
+    assert is_expense_flow({"type": "income", "amount": -100}) is False
+    assert is_expense_flow({"type": "transfer", "amount": -100}) is False
+    assert is_expense_flow({"type": "investment", "amount": -100}) is False
+    assert is_expense_flow({"type": "debt_payment", "amount": -100}) is False
+    # No type set: falls back to sign
+    assert is_expense_flow({"amount": -100}) is True
+    assert is_expense_flow({"amount": 100}) is False
 
 
 def test_auto_categorize():

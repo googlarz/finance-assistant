@@ -102,6 +102,38 @@ TRANSACTION_SCHEMA = {
     "import_ref": None,
 }
 
+# Types that move money between the user's own accounts/net-worth buckets
+# rather than into or out of it — excluded from income/spending analytics.
+# See issue #7: engines were classifying flows by amount sign alone, so a
+# correctly-typed transfer still counted as spending/income.
+NON_FLOW_TYPES = {"transfer", "investment", "debt_payment"}
+
+
+def is_income_flow(txn: dict) -> bool:
+    """True if a transaction counts as income for flow analytics (budgets,
+    forecasts, summaries). Sign is only used as a fallback when type is missing."""
+    t = txn.get("type")
+    if t in NON_FLOW_TYPES:
+        return False
+    if t == "income":
+        return True
+    if not t:
+        return float(txn.get("amount", 0) or 0) > 0
+    return False
+
+
+def is_expense_flow(txn: dict) -> bool:
+    """True if a transaction counts as spending for flow analytics. Sign is
+    only used as a fallback when type is missing."""
+    t = txn.get("type")
+    if t in NON_FLOW_TYPES:
+        return False
+    if t == "expense":
+        return True
+    if not t:
+        return float(txn.get("amount", 0) or 0) < 0
+    return False
+
 
 # ── Auto-categorization ─────────────────────────────────────────────────────
 
@@ -341,9 +373,9 @@ def get_totals(
             totals[key] = {"count": 0, "income": 0.0, "expense": 0.0, "net": 0.0}
         totals[key]["count"] += 1
         amt = float(t.get("amount", 0))
-        if amt >= 0:
+        if is_income_flow(t):
             totals[key]["income"] += amt
-        else:
+        elif is_expense_flow(t):
             totals[key]["expense"] += abs(amt)
         totals[key]["net"] += amt
 

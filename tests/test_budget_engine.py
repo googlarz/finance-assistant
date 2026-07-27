@@ -1,4 +1,6 @@
 """Tests for budget_engine.py."""
+from datetime import datetime
+
 from budget_engine import (
     create_budget, get_budget, get_budget_variance,
     suggest_budget_from_history, format_budget_display,
@@ -47,3 +49,29 @@ def test_format_budget_display(isolated_finance_dir):
     display = format_budget_display(budget)
     assert "2026-04" in display
     assert "food" in display
+
+
+def test_suggest_budget_from_history(isolated_finance_dir):
+    today = datetime.now().strftime("%Y-%m")
+    add_transaction(f"{today}-05", "expense", -300, "food", "Groceries")
+    add_transaction(f"{today}-10", "income", 3000, "salary", "Paycheck")
+
+    suggestion = suggest_budget_from_history(months_back=1)
+    assert suggestion["suggested_limits"]["food"] == 300.0
+    assert "salary" not in suggestion["suggested_limits"]
+
+
+def test_suggest_budget_from_history_excludes_transfers(isolated_finance_dir):
+    """Issue #7: a transfer/investment/debt_payment must not be suggested
+    as a spending category limit just because its amount is negative."""
+    today = datetime.now().strftime("%Y-%m")
+    add_transaction(f"{today}-05", "expense", -300, "food", "Groceries")
+    add_transaction(f"{today}-06", "transfer", -5000, "savings", "Move to savings")
+    add_transaction(f"{today}-07", "investment", -1000, "investment", "Buy ETF")
+    add_transaction(f"{today}-08", "debt_payment", -400, "debt_payment", "Loan principal")
+
+    suggestion = suggest_budget_from_history(months_back=1)
+    assert suggestion["suggested_limits"]["food"] == 300.0
+    assert "savings" not in suggestion["suggested_limits"]
+    assert "investment" not in suggestion["suggested_limits"]
+    assert "debt_payment" not in suggestion["suggested_limits"]

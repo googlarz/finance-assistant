@@ -24,13 +24,13 @@ from tax_optimizer import (
 YEAR = 2025
 
 
-def _insert_tx(conn, date: str, amount: float, category: str = "salary"):
+def _insert_tx(conn, date: str, amount: float, category: str = "salary", type: str = "expense"):
     """Insert a minimal transaction row directly into the DB."""
     conn.execute(
         """
         INSERT INTO transactions
-            (id, account_id, date, amount, currency, category, description, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (id, account_id, date, amount, currency, category, description, type, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             str(uuid.uuid4())[:8],
@@ -40,6 +40,7 @@ def _insert_tx(conn, date: str, amount: float, category: str = "salary"):
             "EUR",
             category,
             "test",
+            type,
             datetime.now().isoformat(),
         ),
     )
@@ -99,6 +100,21 @@ class TestGetYtdData:
             data = _get_ytd_data(conn, YEAR)
         assert data["ytd_income"] == 0.0
         assert data["months_elapsed"] == 0
+
+    def test_transfers_and_investments_excluded(self, isolated_finance_dir):
+        """Issue #7: transfers/investment moves must not inflate YTD income
+        or expenses used for tax-optimization projections."""
+        init_db()
+        with get_conn() as conn:
+            _insert_tx(conn, f"{YEAR}-01-15", 3000.0, "salary")
+            _insert_tx(conn, f"{YEAR}-01-20", -250.0, "food")
+            _insert_tx(conn, f"{YEAR}-01-25", 10000.0, "savings", type="transfer")
+            _insert_tx(conn, f"{YEAR}-01-26", -2000.0, "brokerage", type="investment")
+            _insert_tx(conn, f"{YEAR}-01-27", -500.0, "loan", type="debt_payment")
+        with get_conn() as conn:
+            data = _get_ytd_data(conn, YEAR)
+        assert data["ytd_income"] == pytest.approx(3000.0)
+        assert data["ytd_expenses"] == pytest.approx(250.0)
 
 
 # ---------------------------------------------------------------------------

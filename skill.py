@@ -17,7 +17,7 @@ from onboarding import (
     get_resume_message, get_completion_message, get_onboarding_state,
 )
 
-__version__ = "3.14.0"
+__version__ = "3.15.0"
 
 _timeline_ctx: dict = {}
 

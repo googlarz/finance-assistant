@@ -53,12 +53,12 @@ def mem_conn():
     conn.close()
 
 
-def _insert_tx(conn, date_str: str, amount: float, category: str = "food", account_id: str = "acc1"):
+def _insert_tx(conn, date_str: str, amount: float, category: str = "food", account_id: str = "acc1", type: str = "expense"):
     import uuid
     conn.execute(
-        "INSERT INTO transactions (id, account_id, date, amount, currency, category, description, created_at) "
-        "VALUES (?, ?, ?, ?, 'EUR', ?, 'test', ?)",
-        (str(uuid.uuid4()), account_id, date_str, amount, category, date_str),
+        "INSERT INTO transactions (id, account_id, date, amount, currency, category, description, type, created_at) "
+        "VALUES (?, ?, ?, ?, 'EUR', ?, 'test', ?, ?)",
+        (str(uuid.uuid4()), account_id, date_str, amount, category, type, date_str),
     )
     conn.commit()
 
@@ -157,6 +157,26 @@ def test_get_monthly_summary_with_data(mem_conn):
     assert m["savings_rate"] == pytest.approx(2300 / 3000, rel=0.001)
     assert "food" in m["by_category"]
     assert m["by_category"]["food"] == pytest.approx(500.0)
+
+
+def test_get_monthly_summary_excludes_transfers(mem_conn):
+    """Issue #7: transfers/investment/debt_payment rows must not count as
+    income or expense in the monthly timeline summary."""
+    today = date.today()
+    year, month = today.year, today.month
+    ym = f"{year}-{month:02d}"
+    date_str = f"{ym}-15"
+
+    _insert_tx(mem_conn, date_str, 3000.0, "salary")
+    _insert_tx(mem_conn, date_str, -500.0, "food")
+    _insert_tx(mem_conn, date_str, 10000.0, "savings", type="transfer")
+    _insert_tx(mem_conn, date_str, -2000.0, "brokerage", type="investment")
+    _insert_tx(mem_conn, date_str, -300.0, "loan", type="debt_payment")
+
+    result = get_monthly_summary(mem_conn, months=1)
+    m = result[0]
+    assert m["income"] == pytest.approx(3000.0)
+    assert m["expenses"] == pytest.approx(500.0)
 
 
 def test_get_monthly_summary_net_worth_snapshot(mem_conn):

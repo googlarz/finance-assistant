@@ -71,6 +71,7 @@ def conn(isolated_finance_dir):
             description TEXT,
             source TEXT DEFAULT 'manual',
             payee TEXT,
+            type TEXT DEFAULT 'expense',
             created_at TEXT NOT NULL
         );
     """)
@@ -285,6 +286,41 @@ class TestSavingsRateTrend:
     def test_no_transactions_returns_empty(self, conn):
         assert check_savings_rate_trend(conn) == []
 
+    def test_transfers_excluded_from_income_and_expenses(self, conn):
+        """Issue #7: leaking a transfer into a month's expense total corrupts
+        that month's computed savings rate enough to break a genuine 3-month
+        declining streak, suppressing an alert the user should get."""
+        months = _months_back(6)
+        ordered = list(reversed(months))  # oldest -> newest
+        income = 3000
+        # oldest -> newest rates: 4 months of a clean decline (0.25, 0.20, 0.15, 0.10),
+        # then the 2 oldest months break the streak so months_declining == 3 exactly.
+        rates = [0.20, 0.20, 0.25, 0.20, 0.15, 0.10]
+        for ym, rate in zip(ordered, rates):
+            self._insert_month(conn, ym, income, income * (1 - rate))
+        conn.commit()
+
+        # Sanity: with clean data alone, the decline is real and should alert.
+        baseline_alerts = check_savings_rate_trend(conn)
+        assert len(baseline_alerts) == 1
+        assert baseline_alerts[0]["months_declining"] == 3
+
+        # Inject a large transfer into one of the declining months (index 3,
+        # rate 0.20 → "2026-05"-equivalent). If it leaks into expenses, that
+        # month's apparent rate craters below its neighbor's, breaking the
+        # streak the moment the loop reaches it.
+        xfer_month = ordered[3]
+        conn.execute(
+            "INSERT INTO transactions (id, account_id, date, amount, currency, type, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (f"{xfer_month}-xfer", "acc", f"{xfer_month}-20", -3000, "EUR", "transfer", f"{xfer_month}-20"),
+        )
+        conn.commit()
+
+        alerts = check_savings_rate_trend(conn)
+        assert len(alerts) == 1
+        assert alerts[0]["months_declining"] == 3
+
 
 # ── check_category_creep ──────────────────────────────────────────────────────
 
@@ -318,6 +354,28 @@ class TestCategoryCreep:
             self._insert_spending(conn, m, "Groceries", 300)
         for m in recent:
             self._insert_spending(conn, m, "Groceries", 310)
+        conn.commit()
+        alerts = check_category_creep(conn)
+        cats = [a["category"] for a in alerts]
+        assert "Groceries" not in cats
+
+    def test_credit_card_payment_transfer_excluded(self, conn):
+        """Issue #7: a Credit Card Payment transfer must not be counted as
+        spending in a category, or it inflates that category's totals."""
+        months = _months_back(6)
+        recent = months[:3]
+        prior = months[3:]
+        for m in prior:
+            self._insert_spending(conn, m, "Groceries", 300)
+        for m in recent:
+            self._insert_spending(conn, m, "Groceries", 300)
+        # A large credit-card-payment transfer, mis-tagged with the same
+        # category, should not register as a spending increase.
+        conn.execute(
+            "INSERT INTO transactions (id, account_id, date, amount, currency, category, type, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (f"{recent[0]}-cc", "acc", f"{recent[0]}-20", -2000, "EUR", "Groceries", "transfer", f"{recent[0]}-20"),
+        )
         conn.commit()
         alerts = check_category_creep(conn)
         cats = [a["category"] for a in alerts]

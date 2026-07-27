@@ -242,6 +242,7 @@ def check_savings_rate_trend(conn: sqlite3.Connection) -> list[dict]:
                    SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) AS expenses
             FROM transactions
             WHERE date >= ?
+              AND type NOT IN ('transfer', 'investment', 'debt_payment')
             GROUP BY month
             """,
             (earliest,),
@@ -321,6 +322,7 @@ def check_category_creep(conn: sqlite3.Connection) -> list[dict]:
             FROM transactions
             WHERE date >= ?
               AND amount < 0
+              AND type NOT IN ('transfer', 'investment', 'debt_payment')
             GROUP BY month, category
             """,
             (earliest,),

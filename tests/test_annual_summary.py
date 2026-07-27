@@ -475,3 +475,29 @@ def test_status_badge_html_unknown():
     badge = _status_badge_html("unknown_status")
     assert "span" in badge
     assert "Unknown Status" in badge
+
+
+# ── _load_donation_summary ───────────────────────────────────────────────────
+
+def test_load_donation_summary_sums_gift_expenses():
+    from annual_summary import _load_donation_summary
+    from transaction_logger import add_transaction
+
+    add_transaction("2026-03-01", "expense", -50, "gifts", "Red Cross donation")
+    add_transaction("2026-04-01", "expense", -25, "gifts", "Local shelter")
+
+    result = _load_donation_summary("default", 2026)
+    assert result["total"] == 75.0
+
+
+def test_load_donation_summary_excludes_transfers():
+    """Issue #7: a transfer mis-categorized as gifts must not count as a
+    charitable donation."""
+    from annual_summary import _load_donation_summary
+    from transaction_logger import add_transaction
+
+    add_transaction("2026-03-01", "expense", -50, "gifts", "Red Cross donation")
+    add_transaction("2026-04-01", "transfer", -5000, "gifts", "Transfer to donor-advised fund account")
+
+    result = _load_donation_summary("default", 2026)
+    assert result["total"] == 50.0

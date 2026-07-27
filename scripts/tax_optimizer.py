@@ -51,6 +51,7 @@ def _get_ytd_data(conn: sqlite3.Connection, year: int) -> dict:
             COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) AS ytd_expenses
         FROM transactions
         WHERE date LIKE ?
+          AND type NOT IN ('transfer', 'investment', 'debt_payment')
         """,
         (year_prefix,),
     ).fetchone()

@@ -12,13 +12,13 @@ from typing import Optional
 
 try:
     from finance_storage import get_budget_path, load_json, save_json
-    from transaction_logger import get_totals as get_transaction_totals, get_transactions, EXPENSE_CATEGORIES
+    from transaction_logger import get_totals as get_transaction_totals, get_transactions, EXPENSE_CATEGORIES, is_expense_flow
     from currency import format_money
 except ImportError:
     import os, sys
     sys.path.insert(0, os.path.dirname(__file__))
     from finance_storage import get_budget_path, load_json, save_json
-    from transaction_logger import get_totals as get_transaction_totals, get_transactions, EXPENSE_CATEGORIES
+    from transaction_logger import get_totals as get_transaction_totals, get_transactions, EXPENSE_CATEGORIES, is_expense_flow
     from currency import format_money
 
 
@@ -324,10 +324,9 @@ def suggest_budget_from_history(
             continue
         months_counted += 1
         for t in txns:
-            amt = float(t.get("amount", 0))
-            if amt < 0:  # expenses are negative
+            if is_expense_flow(t):
                 cat = t.get("category") or "other_expense"
-                all_totals[cat] = all_totals.get(cat, 0.0) + abs(amt)
+                all_totals[cat] = all_totals.get(cat, 0.0) + abs(float(t.get("amount", 0)))
 
     if months_counted == 0:
         return {"error": "No transaction history found for suggestion."}

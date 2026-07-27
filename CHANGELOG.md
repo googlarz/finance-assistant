@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.15.0 — 2026-07-27
+
+### Fixed — Analytics classified flows by amount sign, not transaction type
+
+- **`transfer`/`investment`/`debt_payment` transactions were counted as income or spending**: the transaction schema has supported these types since v2, but every analytics engine that aggregated income/expenses classified purely by amount sign — so a correctly-typed transfer between the user's own accounts, an investment purchase, or a debt principal payment still landed in spending/income totals. On a real multi-account export this meant ~$60k of phantom income/expense reaching budgets, forecasts, and tax projections unfiltered ([#6](https://github.com/googlarz/finance-assistant/issues/6)).
+- Fixed across every engine that aggregates transaction flows: `accountability_engine` (savings-rate trend, category creep), `annual_summary` (donation total), `budget_engine` (history-based limit suggestions), `cashflow_forecast` (average daily spend), `tax_optimizer` (YTD income/expenses), `timeline_engine` (monthly summary) — plus the shared `transaction_logger.get_totals()` that `annual_summary`'s income summary depends on.
+- Added `transaction_logger.is_income_flow()` / `is_expense_flow()`: type-first classification, falling back to amount sign only when type is genuinely unset. All Python-side engines now share this instead of hand-rolling sign checks; SQL-side engines (`accountability_engine`, `tax_optimizer`, `timeline_engine`) gained an explicit `type NOT IN ('transfer', 'investment', 'debt_payment')` filter.
+- Reported by [@felciano](https://github.com/felciano) in [#7](https://github.com/googlarz/finance-assistant/issues/7), who also flagged the risk in 5 more engines beyond the 2 in the original repro — confirmed by audit and fixed in all of them.
+- Also: promoted the no-terminal (Cowork/claude.ai) install path out of a collapsed section so non-technical readers don't skip past it, and added a one-line disclaimer that applied tax statute isn't licensed advice.
+
+### Tests (+12)
+- Regression tests per engine confirming a mis-typed transfer/investment/debt_payment doesn't inflate income, spending, category totals, or (for `accountability_engine`) doesn't mask a genuine 3-month savings-rate decline. Direct unit tests for `is_income_flow()`/`is_expense_flow()`.
+
 ## v3.14.0 — 2026-07-06
 
 ### Import safety — multi-account files no longer corrupt silently

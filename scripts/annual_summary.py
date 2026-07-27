@@ -15,14 +15,14 @@ from typing import Optional
 try:
     from finance_storage import ensure_subdir, load_json
     from profile_manager import get_profile
-    from transaction_logger import get_transactions, get_totals
+    from transaction_logger import get_transactions, get_totals, is_expense_flow
     from investment_tracker import get_portfolio
 except ImportError:
     import sys
     sys.path.insert(0, os.path.dirname(__file__))
     from finance_storage import ensure_subdir, load_json
     from profile_manager import get_profile
-    from transaction_logger import get_transactions, get_totals
+    from transaction_logger import get_transactions, get_totals, is_expense_flow
     from investment_tracker import get_portfolio
 
 
@@ -91,7 +91,7 @@ def _load_donation_summary(account_id: str, year: int) -> dict:
     """Sum donation-category transactions for the year."""
     try:
         txns = get_transactions(account_id=account_id, year=year, category="gifts")
-        total = sum(abs(float(t.get("amount", 0))) for t in txns if float(t.get("amount", 0)) < 0)
+        total = sum(abs(float(t.get("amount", 0))) for t in txns if is_expense_flow(t))
         return {"total": round(total, 2)}
     except Exception:
         return {"total": 0.0}
