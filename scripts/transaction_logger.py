@@ -100,6 +100,7 @@ TRANSACTION_SCHEMA = {
     "business_use_pct": 100.0,
     "import_source": None,
     "import_ref": None,
+    "transfer_peer_id": None,   # id of the matching leg in a linked transfer pair (#8)
 }
 
 # Types that move money between the user's own accounts/net-worth buckets
@@ -246,8 +247,9 @@ def add_transaction(
                         conn.execute(
                             """INSERT INTO transactions
                                (id, account_id, date, amount, type, currency,
-                                category, description, source, payee, created_at)
-                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                category, description, source, payee, subcategory,
+                                transfer_peer_id, created_at)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                             (
                                 txn["id"],
                                 txn["account_id"],
@@ -259,6 +261,8 @@ def add_transaction(
                                 txn.get("description"),
                                 txn.get("import_source", "manual"),
                                 txn.get("payee"),
+                                txn.get("subcategory"),
+                                txn.get("transfer_peer_id"),
                                 datetime.now().isoformat(),
                             ),
                         )
@@ -384,6 +388,47 @@ def get_totals(
             totals[key][field] = round(totals[key][field], 2)
 
     return totals
+
+
+# Columns updatable via update_transaction_fields — deliberately narrow so
+# callers can't accidentally rewrite amount/date/account_id through this path.
+_UPDATABLE_FIELDS = {"type", "category", "subcategory", "transfer_peer_id"}
+
+
+def update_transaction_fields(account_id: str, year: int, txn_id: str, updates: dict) -> bool:
+    """Update a subset of fields on an existing transaction (both SQLite and
+    JSON). Used by transfer detection/linking (#8) — not a general editor.
+
+    Returns True if a matching transaction was found and updated.
+    """
+    updates = {k: v for k, v in updates.items() if k in _UPDATABLE_FIELDS}
+    if not updates:
+        return False
+
+    updated = False
+
+    if _db_available():
+        try:
+            from db import get_conn
+            set_clause = ", ".join(f"{k} = ?" for k in updates)
+            with get_conn() as conn:
+                cur = conn.execute(
+                    f"UPDATE transactions SET {set_clause} WHERE id = ?",
+                    (*updates.values(), txn_id),
+                )
+                updated = cur.rowcount > 0
+        except Exception as exc:
+            print(f"[finance_assistant] SQLite update failed: {exc}", file=sys.stderr)
+
+    transactions = _load_transactions(account_id, year)
+    for t in transactions:
+        if t.get("id") == txn_id:
+            t.update(updates)
+            _save_transactions(account_id, year, transactions)
+            updated = True
+            break
+
+    return updated
 
 
 def get_summary_display(

@@ -2,7 +2,7 @@
 from transaction_logger import (
     add_transaction, get_transactions, get_totals,
     get_summary_display, auto_categorize, deduplicate,
-    is_income_flow, is_expense_flow,
+    is_income_flow, is_expense_flow, update_transaction_fields,
 )
 
 
@@ -76,6 +76,40 @@ def test_is_expense_flow():
     # No type set: falls back to sign
     assert is_expense_flow({"amount": -100}) is True
     assert is_expense_flow({"amount": 100}) is False
+
+
+# ── update_transaction_fields (#8) ───────────────────────────────────────────
+
+def test_update_transaction_fields_updates_type_and_peer(isolated_finance_dir):
+    r = add_transaction("2026-04-01", "expense", -100, "food", "Groceries")
+    txn_id = r["transaction_added"]["id"]
+
+    ok = update_transaction_fields("default", 2026, txn_id, {
+        "type": "transfer", "transfer_peer_id": "other-txn-id",
+    })
+    assert ok is True
+
+    txns = get_transactions(account_id="default", year=2026)
+    t = next(t for t in txns if t["id"] == txn_id)
+    assert t["type"] == "transfer"
+    assert t["transfer_peer_id"] == "other-txn-id"
+
+
+def test_update_transaction_fields_ignores_unknown_id(isolated_finance_dir):
+    assert update_transaction_fields("default", 2026, "does-not-exist", {"type": "transfer"}) is False
+
+
+def test_update_transaction_fields_rejects_non_updatable_fields(isolated_finance_dir):
+    """Amount/date/account_id must not be rewritable through this path."""
+    r = add_transaction("2026-04-01", "expense", -100, "food", "Groceries")
+    txn_id = r["transaction_added"]["id"]
+
+    ok = update_transaction_fields("default", 2026, txn_id, {"amount": -9999})
+    assert ok is False  # no updatable fields survive filtering
+
+    txns = get_transactions(account_id="default", year=2026)
+    t = next(t for t in txns if t["id"] == txn_id)
+    assert t["amount"] == -100
 
 
 def test_auto_categorize():

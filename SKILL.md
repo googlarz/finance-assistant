@@ -437,12 +437,17 @@ Save first, then answer. Tell the user what was saved in one short line (e.g. "S
 When the user provides a CSV, MT940, OFX, PDF, or image file:
 1. Detect format with `import_router.py`
 2. **Preserve the original** — `import_file()` copies it to `~/.finance/originals/YYYY-MM-DD_HH-MM-SS_<filename>` before parsing (default on). Mention this to the user: "Original saved to ~/.finance/originals/". To skip: pass `keep_original=False`.
-3. Parse and show preview (first 5-10 transactions)
-4. **If the result contains `multi_account_warning`, STOP before committing.** The file (Mint/Monarch/YNAB export) spans multiple accounts, but every row would land in ONE account — and transfers between the user's accounts would import as fake income/expense, corrupting income totals and savings-rate math. Show the user the account list from `multi_account_warning["source_accounts"]` and ask how to proceed: import anyway (they accept the caveat), import only one account's rows (filter the file first), or split by account. Never commit a multi-account file silently.
+3. **For Mint/Monarch/YNAB files, call `import_file(..., route_by_account=True)`** so each row lands in the account it actually belongs to instead of the one target account. Check the dry-run result:
+   - `result["unmapped_accounts"]` present → some source account names don't match an existing Finance Assistant account. STOP before committing. Show the names and ask: create matching accounts, map each name to an existing account, or accept the fallback (unmapped rows land on the account_id you passed in — same caveat as `multi_account_warning` below).
+   - `result["multi_account_warning"]` present (can appear alongside routing, e.g. if account resolution is skipped) → same hard-stop as before: show `multi_account_warning["source_accounts"]` and ask import-anyway / filter-to-one-account / split-by-account. Never commit a multi-account file silently.
+4. Parse and show preview (first 5-10 transactions)
 5. Otherwise import immediately — do not ask for confirmation unless there are >100 transactions or duplicate risk
-6. Auto-categorize using `transaction_normalizer.py`
+6. Auto-categorize using `transaction_normalizer.py`. Rows whose source category is a known transfer signal (Monarch `Transfer`/`Credit Card Payment`/`Balance Adjustments`, YNAB `Transfer : <Account>` payee) are typed `transfer` automatically and excluded from income/spending — no action needed.
 7. Deduplicate against existing transactions
 8. Update account balance and budget actuals
+9. **After a Mint/Monarch/YNAB import that used `route_by_account=True`, offer to link matching transfer legs**: `transfer_matcher.link_tier2_transfers(year)` finds transfer-typed rows in different accounts that are the *unique* match for each other within a settlement window and records the pairing (`transfer_peer_id`) — it never changes a row's type, only links two rows already typed `transfer`. Report how many pairs it found; a leg with no unique match just stays unlinked (nothing to ask the user about).
+
+**Retroactively finding missed transfers in existing data:** if the user asks to clean up old imports ("did any of my old transactions get miscounted as income?", "find transfers in my history"), use `transfer_matcher.retro_type_transfers(year)`. It defaults to preview (`dry_run=True`) — show the candidate pairs it found (amount, dates, accounts, descriptions) and ask before applying. This is a heuristic match (amount/date/account, no category signal — legacy data doesn't have it), so **always preview and confirm with the user before calling it with `dry_run=False`**. Never chain preview→apply automatically.
 
 **LLM-native fallback — handle ANY format.** If `import_file()` returns a dict with `needs_llm_extraction: True`, no built-in parser matched (unusual bank, foreign layout, copy-pasted table, scanned PDF, screenshot). Do NOT tell the user it's unsupported. Instead:
 1. Read the content yourself: use `result["raw_text"]` if present; if `result["source"] == "image"`, vision-read the file at `result["file_path"]`.

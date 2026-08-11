@@ -9,7 +9,7 @@ import sqlite3
 from pathlib import Path
 from contextlib import contextmanager
 
-SCHEMA_VERSION = 2  # bumped: added transactions.type column
+SCHEMA_VERSION = 3  # bumped: added transactions.transfer_peer_id column
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY);
@@ -41,6 +41,8 @@ CREATE TABLE IF NOT EXISTS transactions (
     description TEXT,
     source TEXT DEFAULT 'manual',
     payee TEXT,
+    subcategory TEXT,        -- e.g. source bank's own "Credit Card Payment" (#8 Tier 2 window)
+    transfer_peer_id TEXT,  -- id of the matching leg in a linked transfer pair (#8)
     created_at TEXT NOT NULL
 );
 
@@ -212,6 +214,20 @@ def _migrate_schema(conn, from_version: int) -> None:
                 )
         except Exception:
             pass  # ALTER is idempotent enough; CREATE TABLE IF NOT EXISTS handles fresh installs
+
+    # v2 → v3: add transactions.transfer_peer_id + subcategory columns (#8 —
+    # linked transfer pairs; subcategory was schema-only in TRANSACTION_SCHEMA
+    # before this, silently dropped on the SQLite side — needed now so Tier 2's
+    # credit-card-payment window detection survives a JSON->SQLite round trip)
+    if from_version < 3:
+        try:
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(transactions)").fetchall()}
+            if "transfer_peer_id" not in cols:
+                conn.execute("ALTER TABLE transactions ADD COLUMN transfer_peer_id TEXT")
+            if "subcategory" not in cols:
+                conn.execute("ALTER TABLE transactions ADD COLUMN subcategory TEXT")
+        except Exception:
+            pass
 
 
 def init_db() -> None:

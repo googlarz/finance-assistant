@@ -268,6 +268,74 @@ def test_parse_amount_strips_currency():
     assert _parse_amount("£99.99", ".") == 99.99
 
 
+# ── Tier 1 transfer detection (#8) ──────────────────────────────────────────
+
+def test_monarch_transfer_category_extracted_as_source_category():
+    csv_content = (
+        "Date,Merchant,Category,Account,Original Statement,Notes,Amount,Tags\n"
+        "2026-04-01,Internal Transfer,Transfer,Checking,XFER TO SAVINGS,,-1000.00,\n"
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+    try:
+        txns = parse_csv(f.name, bank_format="monarch")
+        assert txns[0]["source_category"] == "Transfer"
+        assert txns[0]["source_account"] == "Checking"
+    finally:
+        os.unlink(f.name)
+
+
+def test_monarch_transfer_category_becomes_transfer_type():
+    raw = [
+        {"date": "2026-04-01", "amount": -1000.0, "description": "XFER TO SAVINGS",
+         "payee": "Internal Transfer", "source_category": "Transfer"},
+        {"date": "2026-04-02", "amount": -500.0, "description": "PAYMENT CHASE CARD",
+         "payee": "Chase Credit Card", "source_category": "Credit Card Payment"},
+        {"date": "2026-04-03", "amount": -85.32, "description": "WHOLE FOODS MKT",
+         "payee": "Whole Foods", "source_category": "Groceries"},
+    ]
+    normalized = normalize_transactions(raw, "checking", "monarch", "USD")
+    assert normalized[0]["type"] == "transfer"
+    assert normalized[1]["type"] == "transfer"
+    assert normalized[1]["subcategory"] == "Credit Card Payment"  # for Tier 2's window choice
+    assert normalized[2]["type"] == "expense"  # ordinary category untouched
+
+
+def test_mint_transfer_category_becomes_transfer_type():
+    raw = [{"date": "2026-04-01", "amount": -200.0, "description": "",
+            "payee": "", "source_category": "Transfer"}]
+    normalized = normalize_transactions(raw, "checking", "mint", "USD")
+    assert normalized[0]["type"] == "transfer"
+
+
+def test_ynab_transfer_payee_becomes_transfer_type():
+    raw = [
+        {"date": "2026-04-01", "amount": -200.0, "description": "", "payee": "Transfer : Savings Account"},
+        {"date": "2026-04-02", "amount": -12.50, "description": "", "payee": "Coffee Shop"},
+    ]
+    normalized = normalize_transactions(raw, "checking", "ynab", "USD")
+    assert normalized[0]["type"] == "transfer"
+    assert normalized[1]["type"] == "expense"
+
+
+def test_transfer_category_from_wrong_format_not_matched():
+    """A category string that means 'transfer' for Monarch must not leak into
+    a format where it wasn't verified (e.g. a DKB CSV that happens to have a
+    German Verwendungszweck containing the word)."""
+    raw = [{"date": "2026-04-01", "amount": -500.0, "description": "some text",
+            "payee": "", "source_category": "Transfer"}]
+    normalized = normalize_transactions(raw, "checking", "dkb", "EUR")
+    assert normalized[0]["type"] == "expense"  # dkb isn't in TRANSFER_CATEGORIES
+
+
+def test_explicit_type_not_overridden_by_transfer_signal():
+    """If a parser already set an explicit type, Tier 1 must not override it."""
+    raw = [{"date": "2026-04-01", "amount": -500.0, "description": "", "payee": "",
+            "source_category": "Transfer", "type": "expense"}]
+    normalized = normalize_transactions(raw, "checking", "monarch", "USD")
+    assert normalized[0]["type"] == "expense"
+
+
 def test_detect_wells_fargo():
     # Wells Fargo has no header row — positional columns
     csv_content = '"01/15/2024","-42.50","*","","Coffee Shop"\n'
@@ -430,5 +498,165 @@ def test_import_file_no_warning_on_single_account_file(isolated_finance_dir):
         result = import_file(f.name, account_id="checking", currency="USD",
                              dry_run=True, keep_original=False)
         assert "multi_account_warning" not in result
+    finally:
+        os.unlink(f.name)
+
+
+# ── Per-row account routing (#8) ────────────────────────────────────────────
+
+def test_route_by_account_resolves_known_names(isolated_finance_dir):
+    from import_router import import_file
+    from account_manager import add_account
+
+    add_account({"id": "chk", "name": "Checking", "type": "checking"})
+    add_account({"id": "sav", "name": "Savings", "type": "savings"})
+
+    csv_content = (
+        "Date,Merchant,Category,Account,Original Statement,Notes,Amount,Tags\n"
+        "2024-03-01,Spotify,Subscriptions,Checking,SPOTIFY,,-9.99,\n"
+        "2024-03-02,Payroll,Paycheck,Savings,DEPOSIT,,1000.00,\n"
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+    try:
+        result = import_file(f.name, account_id="chk", currency="USD",
+                             dry_run=True, keep_original=False, route_by_account=True)
+        assert result["routed_by_account"] is True
+        assert "unmapped_accounts" not in result
+        by_desc = {t["description"]: t["account_id"] for t in result["preview"]}
+        assert by_desc["SPOTIFY"] == "chk"
+        assert by_desc["DEPOSIT"] == "sav"
+    finally:
+        os.unlink(f.name)
+
+
+def test_route_by_account_flags_unmapped_names(isolated_finance_dir):
+    """An account name with no matching FA account falls back to the default
+    and is listed for the caller to resolve (create/map/import-anyway)."""
+    from import_router import import_file
+    from account_manager import add_account
+
+    add_account({"id": "chk", "name": "Checking", "type": "checking"})
+
+    csv_content = (
+        "Date,Merchant,Category,Account,Original Statement,Notes,Amount,Tags\n"
+        "2024-03-01,Spotify,Subscriptions,Checking,SPOTIFY,,-9.99,\n"
+        "2024-03-02,Payroll,Paycheck,Unknown Credit Union,DEPOSIT,,1000.00,\n"
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+    try:
+        result = import_file(f.name, account_id="chk", currency="USD",
+                             dry_run=True, keep_original=False, route_by_account=True)
+        assert result["unmapped_accounts"] == ["Unknown Credit Union"]
+        by_desc = {t["description"]: t["account_id"] for t in result["preview"]}
+        assert by_desc["SPOTIFY"] == "chk"
+        assert by_desc["DEPOSIT"] == "chk"  # unresolved falls back to default
+    finally:
+        os.unlink(f.name)
+
+
+def test_route_by_account_writes_to_resolved_accounts(isolated_finance_dir):
+    from import_router import import_file
+    from account_manager import add_account
+    from transaction_logger import get_transactions
+
+    add_account({"id": "chk", "name": "Checking", "type": "checking"})
+    add_account({"id": "sav", "name": "Savings", "type": "savings"})
+
+    csv_content = (
+        "Date,Merchant,Category,Account,Original Statement,Notes,Amount,Tags\n"
+        "2024-03-01,Spotify,Subscriptions,Checking,SPOTIFY,,-9.99,\n"
+        "2024-03-02,Payroll,Paycheck,Savings,DEPOSIT,,1000.00,\n"
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+    try:
+        result = import_file(f.name, account_id="chk", currency="USD",
+                             dry_run=False, keep_original=False, route_by_account=True)
+        assert result["imported"] == 2
+
+        chk_txns = get_transactions(account_id="chk", year=2024)
+        sav_txns = get_transactions(account_id="sav", year=2024)
+        assert {t["description"] for t in chk_txns} == {"SPOTIFY"}
+        assert {t["description"] for t in sav_txns} == {"DEPOSIT"}
+    finally:
+        os.unlink(f.name)
+
+
+def test_multi_account_warning_message_reflects_routing(isolated_finance_dir):
+    """The warning text must not claim rows land in one account once
+    route_by_account has actually routed them elsewhere."""
+    from import_router import import_file
+    from account_manager import add_account
+
+    add_account({"id": "chk", "name": "Checking", "type": "checking"})
+    add_account({"id": "sav", "name": "Savings", "type": "savings"})
+
+    csv_content = (
+        "Date,Merchant,Category,Account,Original Statement,Notes,Amount,Tags\n"
+        "2024-03-01,Spotify,Subscriptions,Checking,SPOTIFY,,-9.99,\n"
+        "2024-03-02,Payroll,Paycheck,Savings,DEPOSIT,,1000.00,\n"
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+    try:
+        unrouted = import_file(f.name, account_id="chk", currency="USD",
+                               dry_run=True, keep_original=False)
+        routed = import_file(f.name, account_id="chk", currency="USD",
+                             dry_run=True, keep_original=False, route_by_account=True)
+        assert "ALL rows will be imported into" in unrouted["multi_account_warning"]["message"]
+        assert "ALL rows will be imported into" not in routed["multi_account_warning"]["message"]
+    finally:
+        os.unlink(f.name)
+
+
+def test_import_file_applies_tier1_transfer_detection(isolated_finance_dir):
+    """Integration regression: import_router.py must pass the SPECIFIC bank
+    format (e.g. "monarch") to normalize_transactions, not the generic
+    container format ("csv") — otherwise Tier 1 (#8) never matches
+    TRANSFER_CATEGORIES and every transfer row silently stays
+    income/expense, even though parse_csv() extracted source_category
+    correctly."""
+    from import_router import import_file
+
+    csv_content = (
+        "Date,Merchant,Category,Account,Original Statement,Notes,Amount,Tags\n"
+        "2024-03-01,Whole Foods,Groceries,Checking,WHOLE FOODS,,-85.32,\n"
+        "2024-03-02,Internal Transfer,Transfer,Checking,XFER TO SAVINGS,,-1000.00,\n"
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+    try:
+        result = import_file(f.name, account_id="checking", currency="USD",
+                             dry_run=True, keep_original=False)
+        by_desc = {t["description"]: t["type"] for t in result["preview"]}
+        assert by_desc["WHOLE FOODS"] == "expense"
+        assert by_desc["XFER TO SAVINGS"] == "transfer"
+    finally:
+        os.unlink(f.name)
+
+
+def test_route_by_account_off_by_default(isolated_finance_dir):
+    """Without opting in, every row still lands on the passed-in account_id —
+    existing single-account behavior is unchanged."""
+    from import_router import import_file
+    from account_manager import add_account
+
+    add_account({"id": "chk", "name": "Checking", "type": "checking"})
+    add_account({"id": "sav", "name": "Savings", "type": "savings"})
+
+    csv_content = (
+        "Date,Merchant,Category,Account,Original Statement,Notes,Amount,Tags\n"
+        "2024-03-01,Spotify,Subscriptions,Checking,SPOTIFY,,-9.99,\n"
+        "2024-03-02,Payroll,Paycheck,Savings,DEPOSIT,,1000.00,\n"
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+    try:
+        result = import_file(f.name, account_id="chk", currency="USD",
+                             dry_run=True, keep_original=False)
+        assert "routed_by_account" not in result
+        assert all(t["account_id"] == "chk" for t in result["preview"])
     finally:
         os.unlink(f.name)

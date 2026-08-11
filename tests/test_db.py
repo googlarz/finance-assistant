@@ -344,3 +344,74 @@ def test_init_db_legacy_upgrade_is_idempotent(tmp_path, monkeypatch):
     with get_conn() as conn:
         ver = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
     assert ver == SCHEMA_VERSION
+
+
+# ── v2 → v3 upgrade: transfer_peer_id column (#8) ────────────────────────────
+
+def _make_v2_db(tmp_path):
+    """A DB with the type column but no transfer_peer_id, version stamped 2 —
+    simulating an install that pre-dates SCHEMA_VERSION 3."""
+    import sqlite3
+    from db import get_db_path
+    path = get_db_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(path))
+    conn.executescript(
+        """
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
+        CREATE TABLE transactions (
+            id TEXT PRIMARY KEY,
+            account_id TEXT,
+            date TEXT,
+            amount REAL,
+            type TEXT DEFAULT 'expense',
+            currency TEXT,
+            category TEXT,
+            description TEXT,
+            source TEXT,
+            payee TEXT,
+            created_at TEXT
+        );
+        INSERT INTO schema_version (version) VALUES (2);
+        INSERT INTO transactions (id, account_id, date, amount, type, currency, created_at)
+        VALUES ('t1', 'a1', '2026-01-01', -50.0, 'expense', 'EUR', '2026-01-01T00:00:00');
+        """
+    )
+    conn.commit()
+    conn.close()
+    return path
+
+
+def test_init_db_upgrades_v2_db_without_transfer_peer_id(tmp_path, monkeypatch):
+    """Regression: init_db() must self-heal a v2 DB — add
+    transactions.transfer_peer_id and stamp v3 — without raising, and must
+    not disturb the existing row."""
+    monkeypatch.setenv("FINANCE_PROJECT_DIR", str(tmp_path))
+    _make_v2_db(tmp_path)
+
+    from db import init_db, get_conn, SCHEMA_VERSION
+    init_db()  # must not raise "no such column: transfer_peer_id"
+
+    with get_conn() as conn:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(transactions)").fetchall()}
+        assert "transfer_peer_id" in cols
+        assert "subcategory" in cols
+
+        ver = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
+        assert ver == SCHEMA_VERSION
+
+        row = conn.execute("SELECT * FROM transactions WHERE id='t1'").fetchone()
+        assert row["type"] == "expense"
+        assert row["transfer_peer_id"] is None
+        assert row["subcategory"] is None
+
+
+def test_init_db_v2_upgrade_is_idempotent(tmp_path, monkeypatch):
+    monkeypatch.setenv("FINANCE_PROJECT_DIR", str(tmp_path))
+    _make_v2_db(tmp_path)
+    from db import init_db, get_conn, SCHEMA_VERSION
+    init_db()
+    init_db()
+    with get_conn() as conn:
+        ver = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
+    assert ver == SCHEMA_VERSION

@@ -142,6 +142,7 @@ KNOWN_FORMATS = {
         "decimal": ".",
         "amount_sign": "mint",   # Mint uses "debit"/"credit" in Transaction Type
         "type_col": "Transaction Type",
+        "category_col": "Category",
     },
     "monarch": {  # Monarch Money
         "detect": ["Date", "Merchant", "Category", "Account", "Original Statement", "Notes", "Amount", "Tags"],
@@ -154,6 +155,7 @@ KNOWN_FORMATS = {
         "encoding": "utf-8",
         "decimal": ".",
         "amount_sign": "monarch",  # Monarch: negative = expense, positive = income
+        "category_col": "Category",
     },
     "ynab": {  # YNAB ("You Need A Budget") register export
         # YNAB export columns: Account, Flag, Date, Payee, Category Group/Category,
@@ -229,14 +231,38 @@ def detect_bank_format(file_path: str) -> Optional[str]:
 # Formats whose exports can span multiple user accounts, and the column that says which.
 _ACCOUNT_COLUMNS = {"mint": "Account Name", "monarch": "Account", "ynab": "Account"}
 
+# Source-format category strings that mean "moved between the user's own
+# accounts" rather than income/spending (#7/#8). These are the row's OWN
+# category as exported by the bank/aggregator, not Finance Assistant's
+# internal category taxonomy — normalize_transactions() maps a row whose
+# source_category is in this set to type="transfer".
+#
+# Monarch set verified against a real 2,742-row/106-account export (#8:
+# "256 rows carry Monarch categories Transfer, Credit Card Payment, or
+# Balance Adjustments"). Mint's category taxonomy is Intuit's own
+# documented defaults (Mint is sunset; no way to re-verify against a live
+# export) — same two transfer-ish categories, minus Balance Adjustments
+# which Mint didn't distinguish as its own category.
+TRANSFER_CATEGORIES = {
+    "monarch": {"Transfer", "Credit Card Payment", "Balance Adjustments"},
+    "mint": {"Transfer", "Credit Card Payment"},
+}
+
+# YNAB doesn't export a Category column for transfers — it clears the
+# category entirely and writes "Transfer : <Account Name>" into Payee
+# instead (YNAB's documented register convention, cited in #8).
+_YNAB_TRANSFER_PAYEE_PREFIX = "Transfer : "
+
 
 def detect_source_accounts(file_path: str, bank_format: Optional[str] = None) -> list[str]:
     """Distinct account names in a multi-account-capable export (Mint/Monarch/YNAB).
 
     Returns [] for single-account formats, unreadable files, or when the account
-    column is missing. The import pipeline stamps every row with ONE account_id
-    (see docs/ARCHITECTURE.md "Import Assumptions") — callers use this to warn
-    when a file spans several accounts instead of importing it silently.
+    column is missing. By default the import pipeline still stamps every row
+    with ONE account_id — callers use this to warn when a file spans several
+    accounts instead of importing it silently. Pass `route_by_account=True` to
+    `import_file()` for per-row resolution instead (see docs/ARCHITECTURE.md
+    "Import Assumptions").
     """
     bank_format = bank_format or detect_bank_format(file_path)
     col = _ACCOUNT_COLUMNS.get(bank_format or "")
@@ -323,12 +349,12 @@ def parse_csv(
     bank_format = bank_format or detect_bank_format(file_path)
 
     if bank_format and bank_format in KNOWN_FORMATS:
-        return _parse_known_format(file_path, KNOWN_FORMATS[bank_format], currency)
+        return _parse_known_format(file_path, KNOWN_FORMATS[bank_format], currency, bank_format)
 
     return _parse_generic(file_path, currency, date_format)
 
 
-def _parse_known_format(file_path: str, fmt: dict, currency: str) -> list[dict]:
+def _parse_known_format(file_path: str, fmt: dict, currency: str, bank_format: str = "") -> list[dict]:
     """Parse using a known bank format definition."""
     encoding = fmt.get("encoding", "utf-8")
     delimiter = fmt.get("delimiter", ",")
@@ -419,14 +445,24 @@ def _parse_known_format(file_path: str, fmt: dict, currency: str) -> list[dict]:
         if not date_val:
             continue
 
-        transactions.append({
+        txn = {
             "date": _parse_date(date_val, dfmt),
             "amount": round(amount, 2),
             "description": _sanitize_cell((desc_val or "").strip()),
             "payee": _sanitize_cell((payee_val or "").strip()),
             "currency": currency,
             "raw": dict(row),
-        })
+        }
+
+        category_col = fmt.get("category_col")
+        if category_col:
+            txn["source_category"] = (row.get(category_col) or "").strip()
+
+        account_col = _ACCOUNT_COLUMNS.get(bank_format)
+        if account_col:
+            txn["source_account"] = (row.get(account_col) or "").strip()
+
+        transactions.append(txn)
 
     return transactions
 

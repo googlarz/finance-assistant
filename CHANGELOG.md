@@ -1,5 +1,26 @@
 # Changelog
 
+## v3.16.0 — 2026-08-11
+
+### Added — First-class transfer support ([#8](https://github.com/googlarz/finance-assistant/issues/8))
+
+- **Per-row account routing**: `import_file(..., route_by_account=True)` resolves each CSV row's own account (from the bank's Account column, on Mint/Monarch/YNAB) instead of stamping the whole file into one `account_id`. Rows that don't match an existing account are reported in `unmapped_accounts` and hard-stop the import, mirroring the existing multi-account warning behavior.
+- **Tier 1 — transfer detection at import time**: rows carrying the bank's own "Transfer"/"Credit Card Payment"/"Balance Adjustments" category (Monarch/Mint) or a YNAB `Transfer : <Account>` payee are typed `transfer` automatically, before any amount-sign heuristic runs. The source category is preserved into a new `subcategory` field for Tier 2's credit-card settlement window.
+- **Tier 2 — `transfer_matcher.link_tier2_transfers(year)`**: among rows already typed `transfer`, finds each row's matching leg in a different account (opposite sign, equal amount, same currency, within a ±3 day settlement window — ±5 days for credit-card payments) and links them via a new `transfer_peer_id` field. Requires mutual uniqueness — a pair only links if each side is the other's *only* qualifying candidate — so ambiguous clusters are skipped rather than force-matched. Safe to auto-apply: every row in the pool was already excluded from income/spending by Tier 1.
+- **Tier 3 — `transfer_matcher.suggest_transfer_pairs(year)`**: the same matching rule applied to ordinary (non-transfer) rows, for imports with no category signal (legacy formats, hand-entered data). Read-only — returns candidates, never mutates. A naive version of this heuristic false-matched ~19 legitimate pairs (refunds, recurring identical charges) on a real Monarch export during validation — the mutual-uniqueness + same-account-exclusion rules exist specifically to reject those.
+- **`transfer_matcher.retro_type_transfers(year, dry_run=True)`**: maintenance command applying the Tier 3 heuristic to already-imported data. Previews by default; `dry_run=False` applies and audit-logs each linked pair.
+- New `transactions.transfer_peer_id` and `transactions.subcategory` SQLite columns (schema v2 → v3, idempotent migration for existing installs).
+- Known limitation, by design: cross-currency transfers are not matched (same-currency only, v1).
+- Reported and scoped by [@felciano](https://github.com/felciano) in [#8](https://github.com/googlarz/finance-assistant/issues/8) with real-data validation of the false-match rate; PR1 of the same report (honoring `type` in analytics) shipped separately in [v3.15.0](#v3150--2026-07-27).
+
+### Fixed
+- `transaction_logger.add_transaction()`'s SQLite insert silently dropped `subcategory`/`transfer_peer_id` even when present in the transaction dict (same split-brain risk class as the v3.15.0 fix) — both are now written on every insert.
+- `import_router.py` resolved Tier 1's category signal against the generic container format (`"csv"`) instead of the specific bank format (`"monarch"`/`"mint"`/`"ynab"`) — Tier 1 detection silently never fired through the real import pipeline despite passing in isolation. Caught by an end-to-end pipeline test, not unit tests alone.
+- Transfer-pair candidate pools now span year boundaries (a settlement window can straddle Dec 31/Jan 1); previously a transfer posted at year-end and settling in January would never link.
+
+### Tests (+34)
+- Schema migration (v2 DB gains `transfer_peer_id`/`subcategory`, idempotent). `update_transaction_fields()` unit tests. Tier 1 detection at the normalizer level and through the full `import_file()` pipeline (the integration bug above). 17 tests for `transfer_matcher.py`: mutual-uniqueness, same-account exclusion, ambiguous-cluster skipping, CC-payment window, cross-currency rejection, year-boundary pairing, dry-run/apply/idempotency for `retro_type_transfers`.
+
 ## v3.15.0 — 2026-07-27
 
 ### Fixed — Analytics classified flows by amount sign, not transaction type
