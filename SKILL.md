@@ -357,6 +357,10 @@ Route flexibly. Modes can overlap.
 | Monte Carlo Simulator | monte carlo / simulate / probability / what are my chances / simulate my FIRE plan / what's the probability I reach my goal | runs `monte_carlo.simulate()` for the relevant scenario; returns distribution + success probability |
 | Subscription Radar | subscriptions, recurring charges, zombie subscription | Detect recurring charges, flag as cancelled, alert if still charging after |
 
+## MCP Server (read-only)
+
+`scripts/mcp_server.py` exposes import preview, totals, budget variance, net worth, and tax summary as MCP tools for claude.ai desktop / any MCP client — see `docs/MCP.md`. Requires Python 3.10+ and the optional `mcp` dependency. Read-only: nothing it exposes writes to `.finance/`.
+
 ## CLI Usage
 
 Finance Assistant can be used directly from the terminal without Claude:

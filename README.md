@@ -221,6 +221,7 @@ Full detail — encryption parameters, threat model, all controls, known limitat
 
 - [**Architecture**](docs/ARCHITECTURE.md) — how it works, data layout, full module reference, testing
 - [**Security**](docs/SECURITY.md) — encryption, threat model, controls
+- [**MCP server**](docs/MCP.md) — read-only tools for claude.ai desktop / any MCP client (Python 3.10+)
 - [**Sovereignty mode**](docs/sovereignty.md) — run fully local via Ollama + accuracy harness
 - [**Contributing**](CONTRIBUTING.md) — add a locale (~7 files), plugin spec, provenance format
 

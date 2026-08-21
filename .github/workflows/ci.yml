@@ -17,6 +17,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r requirements.txt pytest
+      - run: pip install "mcp>=1.0.0"
       - run: pip install ruff
       - run: ruff check scripts/ locales/ --select E,F,W --ignore E501 || true
       - run: pytest tests/ locales/tests/ -x -q

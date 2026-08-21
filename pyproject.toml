@@ -7,7 +7,7 @@ name = "finance-assistant"
 version = "3.2.0"
 description = "Personal finance copilot for Claude Code"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = {text = "MIT"}
 dependencies = [
     "cryptography>=42.0.5,<45",
@@ -23,6 +23,9 @@ full = [
     "mt-940>=4.2.0,<5",
     "numpy>=1.26.0,<3",
 ]
+mcp = [
+    "mcp>=1.0.0",
+]
 dev = [
     "pytest>=8.0.0",
     "ruff>=0.4.0",
@@ -37,7 +40,7 @@ include = ["scripts*", "locales*"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "W"]

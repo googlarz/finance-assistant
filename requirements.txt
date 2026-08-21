@@ -21,3 +21,7 @@ click>=8.1.0,<9
 
 # Optional but recommended: enables log-normal Monte Carlo sampling (faster, more accurate)
 # numpy>=1.26.0,<3
+
+# Optional: MCP server (scripts/mcp_server.py) — exposes read-only tools to
+# claude.ai desktop / any MCP client. Requires Python 3.10+.
+# mcp>=1.0.0

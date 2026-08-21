@@ -11,11 +11,11 @@ import sys
 
 
 def _check_python_version() -> dict:
-    ok = sys.version_info >= (3, 9)
+    ok = sys.version_info >= (3, 10)
     return {
         "name": "Python version",
         "status": "ok" if ok else "warn",
-        "message": f"{sys.version.split()[0]}" + ("" if ok else " (3.9+ recommended)"),
+        "message": f"{sys.version.split()[0]}" + ("" if ok else " (3.10+ required)"),
     }
 
 
