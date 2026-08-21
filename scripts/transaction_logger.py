@@ -480,6 +480,124 @@ def update_transaction_fields(account_id: str, year: int, txn_id: str, updates: 
     return updated
 
 
+def delete_transaction(account_id: str, txn_id: str) -> bool:
+    """Delete a single transaction by id (both stores).
+
+    Regression fix: no delete_transaction existed anywhere — SKILL.md's
+    documented workaround ("delete the account and re-import") relied on
+    account_manager.delete_account(), which was itself a no-op before
+    Phase 1's fix, and even correctly deleting the whole account was
+    always a nuclear option for one bad row.
+
+    The JSON side doesn't know which year the transaction is in, so it
+    searches every {account_id}_*.json file and stops at the first match.
+    """
+    deleted = False
+
+    if _db_available():
+        try:
+            from db import get_conn
+            with get_conn() as conn:
+                cur = conn.execute(
+                    "DELETE FROM transactions WHERE id = ? AND account_id = ?",
+                    (txn_id, account_id),
+                )
+                deleted = cur.rowcount > 0
+        except Exception as exc:
+            print(f"[finance_assistant] SQLite delete failed: {exc}", file=sys.stderr)
+
+    from finance_storage import ensure_subdir
+    txn_dir = ensure_subdir("accounts", "transactions")
+    for f in sorted(txn_dir.glob(f"{account_id}_*.json")):
+        transactions = load_json(f, default={"transactions": []}).get("transactions", [])
+        filtered = [t for t in transactions if t.get("id") != txn_id]
+        if len(filtered) != len(transactions):
+            save_json(f, {
+                "account_id": account_id,
+                "last_updated": datetime.now().isoformat(),
+                "transaction_count": len(filtered),
+                "transactions": filtered,
+            })
+            deleted = True
+            break
+
+    if deleted:
+        try:
+            from audit_log import log_mutation
+            log_mutation(action="delete", target="transaction", target_id=txn_id,
+                         source="delete_transaction", metadata={"account_id": account_id})
+        except Exception:
+            pass
+
+    return deleted
+
+
+def unlink_transfer_pair(account_id: str, txn_id: str, year: int) -> bool:
+    """Clear transfer_peer_id on a wrongly-linked transfer pair — the leg
+    at (account_id, year, txn_id) AND whatever it was linked to. Does not
+    change the transaction's type; use update_transaction_fields for that.
+    """
+    txns = get_transactions(account_id=account_id, year=year)
+    txn = next((t for t in txns if t.get("id") == txn_id), None)
+    if not txn:
+        return False
+
+    peer_id = txn.get("transfer_peer_id")
+    ok_a = update_transaction_fields(account_id, year, txn_id, {"transfer_peer_id": None})
+
+    if peer_id:
+        # Peer may be in a different account/year — search for it.
+        try:
+            from account_manager import list_accounts
+            for acc in list_accounts():
+                for search_year in (year - 1, year, year + 1):
+                    peer_txns = get_transactions(account_id=acc["id"], year=search_year)
+                    if any(t.get("id") == peer_id for t in peer_txns):
+                        update_transaction_fields(acc["id"], search_year, peer_id, {"transfer_peer_id": None})
+                        break
+        except Exception:
+            pass
+
+    return ok_a
+
+
+def delete_import(import_ref: str) -> dict:
+    """Undo an entire import in one call — deletes every transaction
+    stamped with this import_ref, across every account. import_router.py
+    and llm_import.py generate one shared import_ref per non-dry-run
+    import() call and return it in the result dict as result['import_ref'].
+    """
+    from account_manager import list_accounts
+
+    deleted_count = 0
+    for acc in list_accounts():
+        account_id = acc["id"]
+        matching_ids = set()
+        if _db_available():
+            try:
+                from db import get_conn
+                with get_conn() as conn:
+                    rows = conn.execute(
+                        "SELECT id FROM transactions WHERE account_id = ? AND import_ref = ?",
+                        (account_id, import_ref),
+                    ).fetchall()
+                matching_ids.update(r["id"] for r in rows)
+            except Exception:
+                pass
+
+        from finance_storage import ensure_subdir
+        txn_dir = ensure_subdir("accounts", "transactions")
+        for f in txn_dir.glob(f"{account_id}_*.json"):
+            transactions = load_json(f, default={"transactions": []}).get("transactions", [])
+            matching_ids.update(t["id"] for t in transactions if t.get("import_ref") == import_ref)
+
+        for txn_id in matching_ids:
+            if delete_transaction(account_id, txn_id):
+                deleted_count += 1
+
+    return {"import_ref": import_ref, "deleted_count": deleted_count}
+
+
 def get_summary_display(
     account_id: str = "default",
     year: Optional[int] = None,

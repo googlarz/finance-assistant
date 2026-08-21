@@ -9,7 +9,13 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def isolated_finance_dir(tmp_path, monkeypatch):
+    """Shadows conftest's isolated_finance_dir; also redirects audit_log
+    (deliberately HOME-anchored, see its docstring) so mutations here don't
+    write to the developer's real ~/.finance/audit.log."""
     monkeypatch.setenv("FINANCE_PROJECT_DIR", str(tmp_path))
+    import audit_log
+    monkeypatch.setattr(audit_log, "_AUDIT_DIR", tmp_path / ".finance")
+    monkeypatch.setattr(audit_log, "_AUDIT_PATH", tmp_path / ".finance" / "audit.log")
     yield tmp_path
 
 

@@ -125,3 +125,22 @@ def test_update_account_db_present_dual_writes_rename_and_is_asset(isolated_fina
     assert acc["name"] == "New Name"
     assert acc["type"] == "loan"
     assert acc["is_asset"] is False
+
+
+# ── Audit logging on account mutations ──────────────────────────────────────
+
+def test_account_mutations_are_audit_logged(isolated_finance_dir):
+    """Regression: account_manager had zero log_mutation calls despite
+    audit_log.py's own docstring claiming account changes are logged —
+    balances and renames could change silently with no trail."""
+    from audit_log import read_recent
+
+    add_account({"id": "chk", "name": "Checking", "type": "checking", "current_balance": 100})
+    update_account("chk", {"current_balance": 200})
+    delete_account("chk")
+
+    entries = read_recent(limit=10)
+    actions = {(e["action"], e["target"]) for e in entries}
+    assert ("create", "account") in actions
+    assert ("update", "account") in actions
+    assert ("delete", "account") in actions

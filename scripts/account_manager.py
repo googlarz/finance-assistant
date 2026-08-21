@@ -180,6 +180,15 @@ def add_account(account_data: dict) -> dict:
 
     accounts.append(new)
     _save_accounts(accounts)
+
+    try:
+        from audit_log import log_mutation
+        log_mutation(action="create", target="account", target_id=new["id"],
+                     after={"name": new["name"], "type": new["type"]},
+                     source="add_account")
+    except Exception:
+        pass
+
     return new
 
 
@@ -234,6 +243,14 @@ def update_account(account_id: str, updates: dict) -> Optional[dict]:
                 except Exception:
                     pass
             _save_accounts(accounts)
+
+            try:
+                from audit_log import log_mutation
+                log_mutation(action="update", target="account", target_id=account_id,
+                             after=updates, source="update_account")
+            except Exception:
+                pass
+
             return acc
     return None
 
@@ -251,6 +268,14 @@ def delete_account(account_id: str) -> bool:
         except Exception:
             pass
     _save_accounts(filtered)
+
+    try:
+        from audit_log import log_mutation
+        log_mutation(action="delete", target="account", target_id=account_id,
+                     source="delete_account")
+    except Exception:
+        pass
+
     return True
 
 

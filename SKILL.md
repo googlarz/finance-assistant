@@ -233,6 +233,8 @@ If the user is privacy-motivated (raises it, or asks where data goes), be precis
 - `show the audit log` / `what changed today` → `audit_log.read_recent()` / `format_audit()` — before/after values for every mutation
 - `check in on me automatically` / `set up a weekly digest` → `python3 skill.py --setup-digest` (launchd, macOS-only — sends an OS notification, no Claude session required); tell the user plainly if they're not on macOS this path isn't available yet
 - `watch my inbox folder` → `python3 skill.py --setup-watcher` — auto-processes files dropped into `.finance/inbox/`
+- `undo that import` / `that import was wrong` → `transaction_logger.delete_import(import_ref)` — the last import's result carries `import_ref`
+- `delete that transaction` → `transaction_logger.delete_transaction(account_id, txn_id)`
 
 ## 4a. Scheduled Tasks
 
@@ -422,7 +424,7 @@ Use the repo helpers instead of hand-waving.
 | weekly digest | `scripts/weekly_digest.py` | launchd-scheduled (macOS-only) — runs without a Claude session, sends an OS notification |
 | inbox watcher | `scripts/inbox_scanner.py` | launchd-watched (macOS-only) `.finance/inbox/` folder — auto-processes dropped files |
 
-> **Note:** There is currently no `delete_transaction` command. To correct an import mistake, use `account_manager.delete_account()` to remove the account and re-import. Per-transaction deletion will be added in a future release.
+> **Correcting import mistakes:** `transaction_logger.delete_transaction(account_id, txn_id)` removes a single wrongly-imported row. To undo an entire bad import in one call, use `transaction_logger.delete_import(import_ref)` — every non-dry-run `import_file()`/`ingest_extracted()` call returns `result['import_ref']`, which tags every transaction it created. `transaction_logger.unlink_transfer_pair(account_id, txn_id, year)` clears a wrongly-linked transfer pair without deleting either leg.
 
 ## Visualizations
 

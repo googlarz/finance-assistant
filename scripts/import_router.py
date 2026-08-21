@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import uuid
 from datetime import datetime
 from typing import Optional
 
@@ -318,6 +319,11 @@ def import_file(
             result["unmapped_accounts"] = unmapped_accounts
 
     if not dry_run and unique:
+        # One shared ref per import — no parser ever sets import_ref itself,
+        # so this was always None in practice, making delete_import()
+        # (undo-a-bad-import) impossible to target. Generated here, once,
+        # regardless of what any row already carried.
+        import_ref = str(uuid.uuid4())
         imported = 0
         for txn in unique:
             add_transaction(
@@ -331,10 +337,11 @@ def import_file(
                 payee=txn.get("payee", ""),
                 tags=txn.get("tags", []),
                 import_source=fmt,
-                import_ref=txn.get("import_ref"),
+                import_ref=import_ref,
             )
             imported += 1
         result["imported"] = imported
+        result["import_ref"] = import_ref
         result["dry_run"] = False
 
         # Log import

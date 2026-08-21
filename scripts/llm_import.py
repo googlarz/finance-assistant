@@ -32,6 +32,7 @@ already in.
 from __future__ import annotations
 
 import os
+import uuid
 from datetime import datetime
 from typing import Optional
 
@@ -216,6 +217,7 @@ def ingest_extracted(
     }
 
     if not dry_run and unique:
+        import_ref = str(uuid.uuid4())
         imported = 0
         for txn in unique:
             add_transaction(
@@ -227,9 +229,11 @@ def ingest_extracted(
                 account_id=account_id,
                 currency=txn.get("currency", currency),
                 import_source=source_label,
+                import_ref=import_ref,
             )
             imported += 1
         result["imported"] = imported
+        result["import_ref"] = import_ref
         result["dry_run"] = False
 
         log = load_json(get_import_log_path(), default={"imports": []})

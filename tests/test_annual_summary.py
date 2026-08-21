@@ -17,12 +17,23 @@ if scripts_dir not in sys.path:
 
 @pytest.fixture(autouse=True)
 def isolated_finance_dir(tmp_path, monkeypatch):
-    """Each test gets a fresh .finance/ directory."""
+    """Each test gets a fresh .finance/ directory.
+
+    This module defines its own isolated_finance_dir (shadowing conftest's)
+    because it needs to reload several modules per test — but that means
+    conftest's audit_log redirect never applies here. audit_log.py is
+    deliberately HOME-anchored (see its docstring), so without this,
+    add_transaction() calls in this file write real entries into the
+    developer's actual ~/.finance/audit.log.
+    """
     monkeypatch.setenv("FINANCE_PROJECT_DIR", str(tmp_path))
     for mod in ["finance_storage", "annual_summary", "profile_manager",
                 "transaction_logger", "investment_tracker", "currency"]:
         if mod in sys.modules:
             del sys.modules[mod]
+    import audit_log
+    monkeypatch.setattr(audit_log, "_AUDIT_DIR", tmp_path / ".finance")
+    monkeypatch.setattr(audit_log, "_AUDIT_PATH", tmp_path / ".finance" / "audit.log")
     yield tmp_path
 
 

@@ -18,8 +18,23 @@ for p in (PROJECT_ROOT, SCRIPTS_DIR):
 def isolated_finance_dir(tmp_path, monkeypatch):
     """Every test gets its own .finance/ directory. JSON-only — SQLite is not
     initialized, so dual-path code exercises only its JSON branch here. See
-    isolated_finance_dir_db for the DB-present variant."""
+    isolated_finance_dir_db for the DB-present variant.
+
+    audit_log.py is deliberately HOME-anchored in production (its own
+    docstring: survives between project directories) rather than reading
+    FINANCE_PROJECT_DIR like everything else — so without this, every test
+    that triggers log_mutation() (any account/transaction mutation) writes
+    real entries into the developer's actual ~/.finance/audit.log. Redirect
+    it into tmp_path for the duration of the test; production behavior is
+    untouched.
+    """
     monkeypatch.setenv("FINANCE_PROJECT_DIR", str(tmp_path))
+    try:
+        import audit_log
+        monkeypatch.setattr(audit_log, "_AUDIT_DIR", tmp_path / ".finance")
+        monkeypatch.setattr(audit_log, "_AUDIT_PATH", tmp_path / ".finance" / "audit.log")
+    except ImportError:
+        pass
     yield tmp_path
 
 
