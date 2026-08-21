@@ -502,6 +502,45 @@ def test_import_file_no_warning_on_single_account_file(isolated_finance_dir):
         os.unlink(f.name)
 
 
+def test_import_file_reports_rows_skipped(isolated_finance_dir):
+    """Regression: malformed rows were skipped via bare `continue` with no
+    counter — a 500-row statement where 200 rows hit a bad date imported
+    300 and reported success with no sign anything was dropped."""
+    from import_router import import_file
+    csv_content = (
+        "Date,Merchant,Category,Account,Original Statement,Notes,Amount,Tags\n"
+        "2024-03-01,Whole Foods,Groceries,Checking,WHOLE FOODS,,-85.32,\n"
+        "2024-03-02,Broken Row,Groceries,Checking,BROKEN,,,\n"
+        "2024-03-03,Trader Joe,Groceries,Checking,TJ,,-40.00,\n"
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+    try:
+        result = import_file(f.name, account_id="checking", currency="USD",
+                             dry_run=True, keep_original=False)
+        assert result["total_parsed"] == 2
+        assert result.get("rows_skipped") == 1
+        assert "skip_note" in result
+    finally:
+        os.unlink(f.name)
+
+
+def test_import_file_no_rows_skipped_key_when_nothing_dropped(isolated_finance_dir):
+    from import_router import import_file
+    csv_content = (
+        "Date,Merchant,Category,Account,Original Statement,Notes,Amount,Tags\n"
+        "2024-03-01,Whole Foods,Groceries,Checking,WHOLE FOODS,,-85.32,\n"
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+    try:
+        result = import_file(f.name, account_id="checking", currency="USD",
+                             dry_run=True, keep_original=False)
+        assert "rows_skipped" not in result
+    finally:
+        os.unlink(f.name)
+
+
 # ── Per-row account routing (#8) ────────────────────────────────────────────
 
 def test_route_by_account_resolves_known_names(isolated_finance_dir):

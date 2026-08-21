@@ -107,6 +107,22 @@ def _check_cryptography() -> dict:
         }
 
 
+def _check_tesseract() -> dict:
+    """receipt_scanner.py needs the tesseract system binary (not just the
+    pytesseract Python wrapper, which requirements.txt does install) —
+    'scan [image]' throws TesseractNotFoundError without it, and until this
+    check existed --doctor reported all-clear on a machine missing it."""
+    import shutil as _shutil
+    if _shutil.which("tesseract"):
+        return {"name": "OCR (tesseract)", "status": "ok", "message": "tesseract binary found"}
+    return {
+        "name": "OCR (tesseract)",
+        "status": "warn",
+        "message": "tesseract binary not found — 'scan [receipt]' will fail. "
+                    "Install: brew install tesseract (macOS) / apt install tesseract-ocr (Linux)",
+    }
+
+
 def run_checks() -> list:
     """Run all health checks. Returns list of {name, status, message} dicts."""
     return [
@@ -117,6 +133,7 @@ def run_checks() -> list:
         _check_locales_submodule(),
         _check_db(),
         _check_locales(),
+        _check_tesseract(),
     ]
 
 

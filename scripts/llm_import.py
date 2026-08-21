@@ -200,7 +200,7 @@ def ingest_extracted(
     existing: list = []
     for yr in years:
         existing.extend(get_transactions(account_id=account_id, year=yr))
-    unique = deduplicate(normalized, existing)
+    unique = deduplicate(normalized, existing, account_id=account_id)
 
     result = {
         "file": "llm-extracted",

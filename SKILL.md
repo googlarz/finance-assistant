@@ -126,7 +126,7 @@ If you're running through a local model rather than a frontier one (see `docs/so
 9. Never give legally binding financial advice.
 10. When complexity exceeds safe scope, hand off with a structured brief.
 
-## 3. Evidence and Data Policy
+## 3a. Evidence and Data Policy
 
 Use this priority order:
 
@@ -196,7 +196,7 @@ If the user is privacy-motivated (raises it, or asks where data goes), be precis
 
 ### Help and discovery
 
-- `hi` / `hey` / `hello` → lightweight check-in (see §5 — **not** the full session briefing)
+- `hi` / `hey` / `hello` → lightweight check-in (see §4b — **not** the full session briefing)
 - `restart setup` / `redo onboarding` / `start over` → call `onboarding.reset_onboarding()` then present step 1
 - `what can you do` / `help` → list all 18 modes with one-line descriptions
 - `show my finance profile` → full profile display
@@ -224,6 +224,15 @@ If the user is privacy-motivated (raises it, or asks where data goes), be precis
 - `what's the probability I reach my goal?` → Monte Carlo savings goal simulation via `monte_carlo.simulate("savings_goal", ...)`
 - `simulate debt payoff` → Monte Carlo debt payoff distribution via `monte_carlo.simulate("debt_payoff", ...)`
 - `simulate net worth` → Monte Carlo 10-year net worth projection via `monte_carlo.simulate("net_worth", ...)`
+- `update my prices` / `sync prices` → refresh live stock + crypto prices for portfolio holdings via `price_sync.sync_prices()`
+- `update exchange rates` / `sync rates` → refresh cached FX rates via `currency.sync_exchange_rates()` (explicit, opt-in — see §3a on network calls)
+- `find my subscriptions` / `subscription radar` → detect recurring charges via `subscription_detector.detect_subscriptions()`
+- `I cancelled [subscription]` / `flag [subscription] as cancelled` → `subscription_actions.set_action()` records the cancellation date; a later charge on it surfaces as a "zombie subscription" alert via `subscription_actions.still_charging_after_flag()`
+- `back up my data` → `python3 skill.py --backup` (encrypted archive, iCloud Drive by default)
+- `restore my backup` → `python3 skill.py --backup-restore` (refuses to overwrite in place)
+- `show the audit log` / `what changed today` → `audit_log.read_recent()` / `format_audit()` — before/after values for every mutation
+- `check in on me automatically` / `set up a weekly digest` → `python3 skill.py --setup-digest` (launchd, macOS-only — sends an OS notification, no Claude session required); tell the user plainly if they're not on macOS this path isn't available yet
+- `watch my inbox folder` → `python3 skill.py --setup-watcher` — auto-processes files dropped into `.finance/inbox/`
 
 ## 4a. Scheduled Tasks
 
@@ -342,6 +351,7 @@ Route flexibly. Modes can overlap.
 | Session Recall | same as before / same parameters / repeat with X | session_memory: resolve prior query type and params |
 | Milestone Alerts | alert me when / show my milestones / thresholds | threshold_alerts: set, list, check milestones |
 | Monte Carlo Simulator | monte carlo / simulate / probability / what are my chances / simulate my FIRE plan / what's the probability I reach my goal | runs `monte_carlo.simulate()` for the relevant scenario; returns distribution + success probability |
+| Subscription Radar | subscriptions, recurring charges, zombie subscription | Detect recurring charges, flag as cancelled, alert if still charging after |
 
 ## CLI Usage
 
@@ -354,9 +364,23 @@ Finance Assistant can be used directly from the terminal without Claude:
 | `python3 skill.py --install` | Register this clone as a skill (symlink into ~/.claude/skills/) |
 | `python3 skill.py --doctor` | Run health checks on your setup (Python version, dependencies, DB, locales) |
 | `python3 skill.py --demo` | Seed illustrative sample data and open a demo dashboard at `~/.finance/dashboard_demo.html` |
+| `python3 skill.py --wipe-demo` | Remove all seeded demo data (accounts, transactions, goals, debts, holding, profile) — safe no-op if none exists |
 | `python3 skill.py --dashboard` | Generate interactive dashboard from your real data at `~/.finance/dashboard.html` |
+| `python3 skill.py --sync-prices [--force]` | Refresh live stock/crypto prices for portfolio holdings (Yahoo Finance + CoinGecko) |
+| `python3 skill.py --sync-rates` | Refresh cached FX rates (Frankfurter/ECB) — explicit network call, not automatic |
+| `python3 skill.py --subscriptions` | List detected recurring charges |
+| `python3 skill.py --flag-subscription <name>` | Mark a subscription as cancelled, for zombie-charge detection |
+| `python3 skill.py --backup` | Create an encrypted backup archive |
+| `python3 skill.py --backup-restore` | Restore from an encrypted backup (refuses to overwrite in place) |
+| `python3 skill.py --audit` | Show the append-only audit log of recent data mutations |
+| `python3 skill.py --digest` | Run the weekly digest once, immediately (macOS notification) |
+| `python3 skill.py --setup-digest [--day N] [--time HH:MM]` | Install a recurring weekly digest via launchd (macOS-only) |
+| `python3 skill.py --setup-watcher` | Auto-process files dropped into `.finance/inbox/` via launchd (macOS-only) |
+| `python3 skill.py --household` | Shared household expense summary |
+| `python3 skill.py --debt-strategy [--extra N]` | Avalanche vs snowball payoff comparison |
+| `python3 skill.py --locale-stats` | Locale usage telemetry |
 
-The `--demo` and `--dashboard` flags open an HTML file — open it in any browser. No server required.
+The `--demo` and `--dashboard` flags open an HTML file — open it in any browser. No server required. This table covers the flags most useful in conversation; run `python3 skill.py --help` for the complete list.
 
 ## 7. Tool Contract
 
@@ -390,6 +414,13 @@ Use the repo helpers instead of hand-waving.
 | Chart.js artifacts | `scripts/chart_builder.py` | interactive HTML charts for Cowork/Claude.ai |
 | `data_coach.get_unlock_nudge(profile)` | Returns the single highest-value unlock opportunity (data to add → insights unlocked). Surface after every profile update and at session end when no alerts exist. Suppress if more than 60% of insights are already available. |
 | `session_alerts.get_session_alerts(profile)` | Returns budget/goal/tax deadline alerts. Always call at session start; surface before any other output if alerts exist. |
+| live prices | `scripts/price_sync.py` | opt-in refresh of portfolio holding prices — Yahoo Finance (stocks/ETFs) + CoinGecko (crypto); never called automatically |
+| exchange rates | `scripts/currency.py` — `sync_exchange_rates()` | opt-in FX rate refresh (Frankfurter/ECB); network call is explicit, not automatic — the default conversion path uses cached or fallback rates |
+| subscription detection | `scripts/subscription_detector.py`, `scripts/subscription_actions.py` | detect recurring charges, flag as cancelled, alert on continued charges after cancellation |
+| encrypted backup | `scripts/backup.py` | create/restore an encrypted archive; restore refuses to overwrite in place |
+| audit log | `scripts/audit_log.py` | append-only before/after record of every mutation; `read_recent()` / `format_audit()` |
+| weekly digest | `scripts/weekly_digest.py` | launchd-scheduled (macOS-only) — runs without a Claude session, sends an OS notification |
+| inbox watcher | `scripts/inbox_scanner.py` | launchd-watched (macOS-only) `.finance/inbox/` folder — auto-processes dropped files |
 
 > **Note:** There is currently no `delete_transaction` command. To correct an import mistake, use `account_manager.delete_account()` to remove the account and re-import. Per-transaction deletion will be added in a future release.
 

@@ -132,6 +132,27 @@ def test_deduplicate():
     assert unique[0]["description"] == "ALDI"
 
 
+def test_deduplicate_db_present_does_not_dedupe_across_accounts(isolated_finance_dir_db):
+    """Regression: the SQLite dedup path's fallback-key query had no
+    account_id clause — it deduped GLOBALLY across every account, so an
+    identical rent split across two people's checking accounts (or two
+    matching card charges in different accounts) was wrongly dropped."""
+    add_transaction("2026-04-01", "expense", -1200.00, "housing", "Rent split", account_id="alice-chk")
+
+    # Same date/amount/description, but a genuinely different account —
+    # must NOT be treated as a duplicate.
+    new = [{"date": "2026-04-01", "amount": -1200.00, "description": "Rent split", "account_id": "bob-chk"}]
+    unique = deduplicate(new, existing_transactions=[], account_id="bob-chk")
+    assert len(unique) == 1
+
+
+def test_deduplicate_db_present_still_catches_same_account_duplicate(isolated_finance_dir_db):
+    add_transaction("2026-04-01", "expense", -45.50, "food", "REWE", account_id="chk")
+    new = [{"date": "2026-04-01", "amount": -45.50, "description": "REWE", "account_id": "chk"}]
+    unique = deduplicate(new, existing_transactions=[], account_id="chk")
+    assert len(unique) == 0
+
+
 def test_summary_display(isolated_finance_dir):
     add_transaction("2026-04-01", "expense", -100, "food", "REWE")
     display = get_summary_display(year=2026, month=4)

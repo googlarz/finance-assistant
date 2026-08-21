@@ -606,6 +606,27 @@ if __name__ == "__main__":
         print(format_stats())
         sys.exit(0)
 
+    if "--sync-prices" in sys.argv:
+        _setup_db()
+        from price_sync import sync_prices
+        result = sync_prices(force="--force" in sys.argv)
+        print(f"Updated {len(result['updated'])} holding(s), "
+              f"skipped {len(result['skipped'])}, failed {len(result['failed'])}.")
+        if result["updated"]:
+            print(f"Total value change: {result['total_value_change']:+,.2f}")
+        sys.exit(0)
+
+    if "--sync-rates" in sys.argv:
+        from currency import sync_exchange_rates
+        result = sync_exchange_rates()
+        if result["status"] == "ok":
+            print(f"Exchange rates updated — {result['currencies']} currencies "
+                  f"(ECB data as of {result.get('source_date', '?')}).")
+        else:
+            print(f"Exchange rate sync failed: {result.get('error')}", file=sys.stderr)
+            sys.exit(1)
+        sys.exit(0)
+
     if "--tax-brief" in sys.argv:
         _setup_db()
         from tax_brief import generate as _gen_brief

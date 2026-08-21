@@ -354,6 +354,43 @@ def parse_csv(
     return _parse_generic(file_path, currency, date_format)
 
 
+def count_data_rows(file_path: str, bank_format: Optional[str] = None) -> int:
+    """Count data rows in the file's data section — for import-loss
+    accounting (import_router surfaces skipped = count_data_rows(...) -
+    len(parsed)). Rows the parser's own validation would reject (bad
+    dates, short rows, etc.) still count here, since this counts what the
+    file offered, not what parse_csv() accepted.
+    """
+    bank_format = bank_format or detect_bank_format(file_path)
+    fmt = KNOWN_FORMATS.get(bank_format) if bank_format else None
+
+    try:
+        with open(file_path, "r", encoding=(fmt or {}).get("encoding", "utf-8"), errors="replace") as f:
+            lines = f.read().split("\n")
+    except OSError:
+        return 0
+
+    delimiter = (fmt or {}).get("delimiter", ",")
+
+    if fmt and fmt.get("positional"):
+        return sum(1 for row in csv.reader(lines, delimiter=delimiter) if any(c.strip() for c in row))
+
+    if fmt:
+        header_idx = None
+        for i, line in enumerate(lines):
+            if fmt["detect"][0] in line:
+                header_idx = i
+                break
+        if header_idx is None:
+            return 0
+        csv_lines = "\n".join(lines[header_idx:])
+        return sum(1 for _ in csv.DictReader(csv_lines.splitlines(), delimiter=delimiter))
+
+    # Generic path: best-effort — non-empty lines minus one header row.
+    non_empty = [ln for ln in lines if ln.strip()]
+    return max(0, len(non_empty) - 1)
+
+
 def _parse_known_format(file_path: str, fmt: dict, currency: str, bank_format: str = "") -> list[dict]:
     """Parse using a known bank format definition."""
     encoding = fmt.get("encoding", "utf-8")

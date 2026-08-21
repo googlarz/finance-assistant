@@ -157,11 +157,14 @@ def import_file(
     parser_format = fmt
 
     multi_account_warning = None
+    rows_skipped = None
     if fmt == "csv":
-        from csv_importer import parse_csv, detect_source_accounts, detect_bank_format
+        from csv_importer import parse_csv, detect_source_accounts, detect_bank_format, count_data_rows
         bank_format = detect_bank_format(file_path)
         parser_format = bank_format or "csv"
         raw = parse_csv(file_path, bank_format=bank_format, currency=currency)
+        data_rows = count_data_rows(file_path, bank_format)
+        rows_skipped = max(0, data_rows - len(raw))
         source_accounts = detect_source_accounts(file_path, bank_format)
         if len(source_accounts) > 1:
             if route_by_account:
@@ -286,7 +289,7 @@ def import_file(
         existing: list = []
         for yr in years_in_file:
             existing.extend(get_transactions(account_id=target_account, year=yr))
-        unique.extend(deduplicate(rows, existing))
+        unique.extend(deduplicate(rows, existing, account_id=target_account))
 
     result = {
         "file": os.path.basename(file_path),
@@ -301,6 +304,12 @@ def import_file(
         "dry_run": dry_run,
         "original_saved": original_saved,
     }
+    if rows_skipped:
+        result["rows_skipped"] = rows_skipped
+        result["skip_note"] = (
+            f"{rows_skipped} row(s) in the file didn't parse (bad dates, bad amounts, or "
+            "encoding issues) and were silently excluded from total_parsed above."
+        )
     if multi_account_warning:
         result["multi_account_warning"] = multi_account_warning
     if route_by_account:

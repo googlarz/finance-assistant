@@ -526,9 +526,23 @@ def _format_transaction_added(txn: dict) -> str:
     )
 
 
-def deduplicate(new_transactions: list[dict], existing_transactions: list[dict]) -> list[dict]:
+def deduplicate(
+    new_transactions: list[dict],
+    existing_transactions: list[dict],
+    account_id: Optional[str] = None,
+) -> list[dict]:
     """Remove likely duplicates based on date + amount + description.
     Uses SQLite EXISTS check when DB is available (faster); falls back to in-memory set.
+
+    account_id, when passed, scopes the fallback-key match to that account
+    (both stores). Regression fix: the SQLite branch's fallback-key query
+    used to have no account_id clause at all — it deduped GLOBALLY across
+    every account, so an identical amount+description in a DIFFERENT
+    account (e.g. the same rent split across two people's accounts, or
+    matching card charges) was wrongly dropped as a duplicate. The JSON
+    branch was already effectively per-account (existing_transactions is
+    caller-supplied, already scoped), so this only changes SQLite's
+    behavior to match.
     """
     if _db_available():
         try:
@@ -548,12 +562,22 @@ def deduplicate(new_transactions: list[dict], existing_transactions: list[dict])
                         key_date = t.get("date", "")
                         key_amt = round(float(t.get("amount", 0)), 2)
                         key_desc = (t.get("description") or "").lower()[:50]
-                        exists = conn.execute(
-                            """SELECT 1 FROM transactions
-                               WHERE date=? AND amount=? AND LOWER(SUBSTR(description,1,50))=?
-                               LIMIT 1""",
-                            (key_date, key_amt, key_desc),
-                        ).fetchone()
+                        target_account = account_id or t.get("account_id")
+                        if target_account:
+                            exists = conn.execute(
+                                """SELECT 1 FROM transactions
+                                   WHERE date=? AND amount=? AND LOWER(SUBSTR(description,1,50))=?
+                                     AND account_id=?
+                                   LIMIT 1""",
+                                (key_date, key_amt, key_desc, target_account),
+                            ).fetchone()
+                        else:
+                            exists = conn.execute(
+                                """SELECT 1 FROM transactions
+                                   WHERE date=? AND amount=? AND LOWER(SUBSTR(description,1,50))=?
+                                   LIMIT 1""",
+                                (key_date, key_amt, key_desc),
+                            ).fetchone()
                         if not exists:
                             unique.append(t)
             return unique
