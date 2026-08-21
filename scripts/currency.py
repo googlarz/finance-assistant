@@ -57,6 +57,40 @@ def _save_cached_rates(rates: dict) -> None:
     save_json(_get_rates_cache_path(), rates)
 
 
+# Frankfurter — free, no API key, ECB-sourced daily rates.
+_FRANKFURTER_URL = "https://api.frankfurter.app/latest?from=EUR"
+
+
+def sync_exchange_rates() -> dict:
+    """Fetch live EUR-based exchange rates and cache them, so
+    get_exchange_rate()'s 24h-TTL cache branch has something to read instead
+    of always falling through to the hardcoded ~2024 fallback table.
+
+    Explicit, opt-in — mirrors price_sync.sync_prices()'s pattern. NOT
+    called automatically by convert()/get_exchange_rate(); a user/skill
+    action triggers this, same as refreshing portfolio prices.
+    """
+    import urllib.request
+
+    try:
+        req = urllib.request.Request(_FRANKFURTER_URL, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())
+        rates = data.get("rates", {})
+        rates["EUR"] = 1.0
+        if len(rates) < 2:
+            return {"status": "failed", "error": "empty rate table in response"}
+        _save_cached_rates({"rates": rates})
+        return {
+            "status": "ok",
+            "currencies": len(rates),
+            "fetched_at": datetime.now().isoformat(),
+            "source_date": data.get("date"),
+        }
+    except Exception as exc:
+        return {"status": "failed", "error": str(exc)}
+
+
 def get_exchange_rate(
     from_currency: str,
     to_currency: str,

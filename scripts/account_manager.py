@@ -254,8 +254,28 @@ def delete_account(account_id: str) -> bool:
     return True
 
 
+def _convert_to(amount: float, from_currency: str, to_currency: str) -> float:
+    """Convert, falling back to the raw amount if conversion fails — same
+    degrade-gracefully behavior net_worth_engine uses."""
+    if from_currency == to_currency:
+        return amount
+    try:
+        from currency import convert
+        converted, _confidence = convert(amount, from_currency, to_currency)
+        return converted
+    except Exception:
+        return amount
+
+
 def get_total_balance(account_type: Optional[str] = None, currency: str = "EUR") -> dict:
-    """Sum balances by asset/liability. Optionally filter by type."""
+    """Sum balances by asset/liability, converted to `currency`. Optionally
+    filter by type.
+
+    Regression fix: this used to sum raw balances across currencies and
+    stamp the result with whatever `currency` was passed (default 'EUR')
+    regardless of what the accounts actually held — a USD account's 500
+    was silently counted as 500 EUR.
+    """
     accounts = _load_accounts()
     if account_type:
         accounts = [a for a in accounts if a["type"] == account_type]
@@ -263,7 +283,7 @@ def get_total_balance(account_type: Optional[str] = None, currency: str = "EUR")
     assets = 0.0
     liabilities = 0.0
     for acc in accounts:
-        bal = float(acc.get("current_balance") or 0.0)
+        bal = _convert_to(float(acc.get("current_balance") or 0.0), acc.get("currency", currency), currency)
         if acc.get("is_asset", True):
             assets += bal
         else:

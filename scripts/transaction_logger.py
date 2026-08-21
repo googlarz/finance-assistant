@@ -386,14 +386,32 @@ def get_transactions(
     return txns
 
 
+def _account_currency(account_id: str) -> str:
+    try:
+        from account_manager import get_account
+        acc = get_account(account_id)
+        if acc:
+            return acc.get("currency", "EUR")
+    except Exception:
+        pass
+    return "EUR"
+
+
 def get_totals(
     account_id: str = "default",
     year: Optional[int] = None,
     month: Optional[int] = None,
     group_by: str = "category",
 ) -> dict:
-    """Return totals grouped by category or type."""
+    """Return totals grouped by category or type, converted to the account's
+    own currency.
+
+    Regression fix: this used to sum transaction amounts ignoring each
+    row's currency field entirely — a USD statement imported into an EUR
+    account had its dollar amounts counted as euros with no conversion.
+    """
     txns = get_transactions(account_id=account_id, year=year, month=month)
+    target_currency = _account_currency(account_id)
     totals: dict = {}
     for t in txns:
         key = t.get(group_by, "other")
@@ -401,6 +419,13 @@ def get_totals(
             totals[key] = {"count": 0, "income": 0.0, "expense": 0.0, "net": 0.0}
         totals[key]["count"] += 1
         amt = float(t.get("amount", 0))
+        txn_currency = t.get("currency") or target_currency
+        if txn_currency != target_currency:
+            try:
+                from currency import convert
+                amt, _confidence = convert(amt, txn_currency, target_currency)
+            except Exception:
+                pass  # fall back to raw amount rather than dropping the transaction
         if is_income_flow(t):
             totals[key]["income"] += amt
         elif is_expense_flow(t):

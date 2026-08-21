@@ -100,6 +100,20 @@ def test_delete_account_db_present_actually_deletes(isolated_finance_dir_db):
     assert all(a["id"] != "test" for a in get_accounts())
 
 
+def test_total_balance_converts_mixed_currencies(isolated_finance_dir):
+    """Regression: get_total_balance() used to sum raw balances across
+    currencies and stamp the result 'EUR' regardless of composition — a
+    USD account's 500 was silently counted as 500 EUR."""
+    add_account({"name": "EUR Checking", "type": "checking", "current_balance": 1000, "currency": "EUR"})
+    add_account({"name": "USD Savings", "type": "savings", "current_balance": 1000, "currency": "USD"})
+
+    totals = get_total_balance(currency="EUR")
+    # USD 1000 -> EUR via the fallback rate table is NOT 1000 flat
+    assert totals["assets"] != 2000.0
+    assert totals["assets"] > 1000.0
+    assert totals["currency"] == "EUR"
+
+
 def test_update_account_db_present_dual_writes_rename_and_is_asset(isolated_finance_dir_db):
     """Regression: update_account() only mirrored current_balance to SQLite
     — a renamed account or a type change (checking -> loan) never reached

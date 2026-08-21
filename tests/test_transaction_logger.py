@@ -138,6 +138,22 @@ def test_summary_display(isolated_finance_dir):
     assert "food" in display.lower() or "Food" in display
 
 
+def test_get_totals_converts_transaction_currency_to_account_currency(isolated_finance_dir):
+    """Regression: get_totals() used to sum transaction amounts ignoring
+    each row's currency field entirely — a USD statement imported into a
+    EUR account had its dollar amounts counted as euros with no conversion."""
+    from account_manager import add_account
+
+    add_account({"id": "eur-account", "name": "EUR Checking", "type": "checking", "currency": "EUR"})
+    add_transaction("2026-04-01", "expense", -100, "food", "USD purchase",
+                     account_id="eur-account", currency="USD")
+
+    totals = get_totals(account_id="eur-account", year=2026)
+    # USD 100 -> EUR via the fallback rate table is NOT a flat 100
+    assert totals["food"]["expense"] != 100.0
+    assert totals["food"]["expense"] > 0
+
+
 # ── DB-present: 6 TRANSACTION_SCHEMA fields used to be silently dropped ──
 
 def test_db_present_round_trips_previously_dropped_fields(isolated_finance_dir_db):
