@@ -140,12 +140,15 @@ sync). Optional dependency (`pip install finance-assistant[mcp]`). See
   developer's actual home directory (7,249 lines accumulated before this
   was caught). Production behavior is unchanged; only test isolation.
 
-### Tests (+54, of which 4 are MCP-only)
+### Tests (+54 in this repo, of which 4 are MCP-only)
 
 Every fix in this release was revert-verified (stashed, confirmed the
-new test fails, restored) before merging. Full suite: 1,484 passed under
-Python <3.10 (was 1,434); 1,488 passed with Python 3.10+ and the `mcp`
-extra installed (`tests/test_mcp_server.py`'s 4 tests otherwise skip via
+new test fails, restored) before merging. Full suite (`tests/` +
+`locales/tests/`): 1,519 passed under Python <3.10 (was 1,434 combined
+at the start of this work — the locales submodule also picked up 38
+tests from an unrelated upstream Irish-locale merge along the way);
+1,523 passed with Python 3.10+ and the `mcp` extra installed
+(`tests/test_mcp_server.py`'s 4 tests otherwise skip via
 `pytest.importorskip`).
 
 ## v3.16.0 — 2026-08-11
