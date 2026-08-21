@@ -215,14 +215,29 @@ def test_find_pairs_ignores_zero_amount():
     assert find_pairs(txns) == []
 
 
-def test_find_pairs_rejects_cross_currency_match():
-    """Same amount/date/account shape but different currencies must not be
-    treated as a transfer pair (v1: same-currency matching only)."""
+def test_find_pairs_rejects_cross_currency_match_outside_tolerance():
+    """A cross-currency pair whose amounts don't correspond at anything
+    close to the real exchange rate must not be treated as a transfer —
+    500 EUR out vs. a flat 500 USD in is off by ~7% at the fallback rate,
+    well outside FX_MATCH_TOLERANCE."""
     txns = [
         {"id": "a", "date": "2026-04-01", "account_id": "chk", "amount": -500.0, "currency": "EUR"},
         {"id": "b", "date": "2026-04-02", "account_id": "sav", "amount": 500.0, "currency": "USD"},
     ]
     assert find_pairs(txns) == []
+
+
+def test_find_pairs_matches_cross_currency_within_tolerance(isolated_finance_dir):
+    """Regression (#8 Q6, v2): a genuine cross-currency transfer — 500 EUR
+    out, converted to USD at the fallback rate (1 EUR = 1.08 USD) — must
+    now link. Same-currency-only was the v1 punt."""
+    txns = [
+        {"id": "a", "date": "2026-04-01", "account_id": "chk", "amount": -500.0, "currency": "EUR"},
+        {"id": "b", "date": "2026-04-02", "account_id": "sav", "amount": 540.0, "currency": "USD"},
+    ]
+    pairs = find_pairs(txns)
+    assert len(pairs) == 1
+    assert {pairs[0][0]["id"], pairs[0][1]["id"]} == {"a", "b"}
 
 
 # ── Year-boundary pairing ─────────────────────────────────────────────────────
