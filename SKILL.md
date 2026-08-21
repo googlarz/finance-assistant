@@ -236,6 +236,7 @@ If the user is privacy-motivated (raises it, or asks where data goes), be precis
 - `undo that import` / `that import was wrong` → `transaction_logger.delete_import(import_ref)` — the last import's result carries `import_ref`
 - `delete that transaction` → `transaction_logger.delete_transaction(account_id, txn_id)`
 - After importing a large batch of historical transactions (e.g. 1+ years), offer to backfill the net worth chart: `net_worth_engine.backfill_net_worth_history(months=N)` — derives monthly snapshots from account balances + transaction history (cash accounts only; never overwrites a real snapshot). Say plainly that these are derived estimates, not exact historical readings.
+- If an import's preview carries `transfer_residual` with a non-trivial `net_by_currency` value, mention it — it means the file's own transfer rows don't net to zero, so one side of a transfer is likely missing (e.g. only one account of a multi-account export was imported).
 
 ## 4a. Scheduled Tasks
 

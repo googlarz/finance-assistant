@@ -318,6 +318,27 @@ def import_file(
         if unmapped_accounts:
             result["unmapped_accounts"] = unmapped_accounts
 
+    # Per-import transfer residual counters (#8 roadmap sketch — mechanical
+    # part only; the "compare flow-implied vs. stated balance change"
+    # reconciliation half needs a separate design decision on period/
+    # tolerance/surfacing, not built here). If this file's own transfer
+    # rows fully pair up, their amounts should net close to zero per
+    # currency; a residual signals the file is missing one side of some
+    # transfer(s) — e.g. only one account of a multi-account statement was
+    # imported. Computed on this batch alone, so it can't say whether a
+    # transfer's OTHER leg exists in a prior import — that's what
+    # transfer_matcher.link_tier2_transfers() checks after the fact.
+    transfer_rows = [t for t in unique if t.get("type") == "transfer"]
+    if transfer_rows:
+        net_by_currency: dict = {}
+        for t in transfer_rows:
+            cur = t.get("currency", currency)
+            net_by_currency[cur] = net_by_currency.get(cur, 0.0) + float(t.get("amount", 0))
+        result["transfer_residual"] = {
+            "transfer_count": len(transfer_rows),
+            "net_by_currency": {c: round(v, 2) for c, v in net_by_currency.items()},
+        }
+
     if not dry_run and unique:
         # One shared ref per import — no parser ever sets import_ref itself,
         # so this was always None in practice, making delete_import()

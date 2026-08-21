@@ -566,6 +566,30 @@ def test_import_file_reports_rows_skipped(isolated_finance_dir):
         os.unlink(f.name)
 
 
+def test_import_file_reports_transfer_residual(isolated_finance_dir):
+    """Regression: no per-import counter existed for whether a file's own
+    transfer rows fully pair up — a file missing one side of a transfer
+    (e.g. only one account of a multi-account export) imported silently
+    with no signal anything was structurally incomplete."""
+    from import_router import import_file
+    csv_content = (
+        "Date,Merchant,Category,Account,Original Statement,Notes,Amount,Tags\n"
+        "2024-03-01,Internal Transfer,Transfer,Checking,XFER,,-500.00,\n"
+        "2024-03-02,Internal Transfer,Transfer,Checking,XFER,,300.00,\n"
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+    try:
+        result = import_file(f.name, account_id="checking", currency="USD",
+                             dry_run=True, keep_original=False)
+        residual = result.get("transfer_residual")
+        assert residual is not None
+        assert residual["transfer_count"] == 2
+        assert residual["net_by_currency"]["USD"] == -200.00  # -500 + 300, doesn't net to zero
+    finally:
+        os.unlink(f.name)
+
+
 def test_import_file_no_rows_skipped_key_when_nothing_dropped(isolated_finance_dir):
     from import_router import import_file
     csv_content = (
