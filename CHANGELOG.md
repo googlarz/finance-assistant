@@ -1,5 +1,153 @@
 # Changelog
 
+## v4.0.0 — 2026-08-21
+
+### Breaking — Python 3.10+ required
+
+Project minimum bumped from 3.9 to 3.10 — Python 3.9 reached end-of-life
+October 2025, and the new MCP server (below) needs 3.10+. The base
+skill/CLI install is otherwise unaffected.
+
+### Fixed — SQLite/JSON split-brain (the DB-present code path was never tested)
+
+`tests/conftest.py`'s isolated_finance_dir fixture never called `init_db()`,
+so every dual-write bug below shipped invisibly behind 1,434 green tests
+that only ever exercised the JSON branch. Added an opt-in
+`isolated_finance_dir_db` fixture and DB-present regression tests
+throughout.
+
+- `accounts.balance` never matched the JSON schema's `current_balance`
+  field, and `is_asset`/`as_of`/`include_in_net_worth`/`include_in_budget`/
+  `notes` didn't exist as SQLite columns at all — every SQLite-backed
+  account read defaulted `is_asset` to `True`, silently misclassifying
+  every liability as an asset. Migrated (schema v3→v4), backfills
+  `is_asset` for existing rows.
+- 6 `TRANSACTION_SCHEMA` fields (`is_recurring`, `tags`, `tax_relevant`,
+  `tax_category`, `business_use_pct`, `import_ref`) were dropped on the
+  SQLite `INSERT` despite the normalizer/recurring engine/receipt scanner
+  populating them on write.
+- `net_worth_engine._to_primary()` did `cash_assets += convert(...)`
+  directly — `convert()` returns `(amount, confidence)`, so any second
+  currency crashed `calculate_net_worth()` with a `TypeError`. Reproduced,
+  fixed; debt balances and the display label are now currency-aware too.
+- `budget_engine.update_actual()` had zero callers, so `actual_amount`
+  stayed 0 forever once SQLite was active — wired into
+  `update_budget_actuals()`, now upserts unbudgeted categories too. Also
+  found `budget_engine._db_available()` caching its result in a module
+  global forever, unlike every other dual-path module — removed the cache.
+- Goals, recurring items, and net-worth snapshots were written to SQLite
+  only once, by the first-boot migration, then silently frozen —
+  invisible to `accountability_engine.check_goal_drift`,
+  `overdraft_detector`'s inflow/outflow projections, and
+  `timeline_engine`. Now dual-write on every mutation.
+- `account_manager.delete_account()`/`update_account()` were JSON-only —
+  `list_accounts()`/`get_account()` prefer SQLite, so deletes and renames
+  were silent no-ops once the DB was active. Now dual-store correct, and
+  every account mutation is audit-logged (previously zero, despite
+  `audit_log.py`'s own docstring claiming coverage).
+- `demo_data.py`'s `--wipe-demo` relied on the broken `delete_account()` —
+  demo accounts, transactions, goals, debts, the holding, and the "Alex"
+  profile all survived a wipe that printed success. Now genuinely wipes
+  everything it seeded; SKILL.md now instructs Claude to call it before
+  real onboarding, making the "wiped when you start real setup" promise
+  true.
+
+### Fixed — Multi-currency correctness
+
+- `account_manager.get_total_balance()` and `transaction_logger.get_totals()`
+  summed raw amounts across currencies with no conversion — a USD
+  account's balance, or a USD transaction in a EUR account, was counted
+  as if it were EUR. Both now convert.
+- `currency.sync_exchange_rates()` (new): the claimed 24h-TTL rate cache
+  was dead code — nothing ever fetched live rates, so every conversion
+  silently used a hardcoded ~2024 fallback table. Explicit/opt-in,
+  mirrors `price_sync.sync_prices()`'s pattern. New `--sync-rates` CLI
+  flag (`--sync-prices` too — `price_sync.py` had no CLI entry point at
+  all before this).
+
+### Fixed — Import correctness
+
+- `transaction_normalizer` discarded the bank's own Category column for
+  every non-transfer row in favor of keyword-guess `auto_categorize()`,
+  which per issue #6 left "well over half" of a real US export in
+  `other_expense`/`other_income`. Added `csv_importer.SOURCE_CATEGORY_MAP`
+  (Monarch/Mint default categories → internal taxonomy, best-effort from
+  public docs — no real export sample was available).
+- Malformed rows were silently dropped via bare `continue` with no
+  counter. `import_router.import_file()` now surfaces `rows_skipped`.
+- The SQLite dedup path's fallback-key query had no `account_id`
+  clause — it deduped **globally** across every account, so an identical
+  amount+description in a genuinely different account (a rent split,
+  matching card charges) was wrongly dropped. Now scoped per-account,
+  matching the JSON path.
+- `transfer_matcher.py`'s same-currency-only rule (v3.16.0's documented
+  v1 punt, issue #8 Q6) is replaced with rate-window matching:
+  cross-currency pairs now match within a 2% tolerance of the current
+  exchange rate.
+- Per-import transfer residual counters (`transfer_residual` in the
+  import result): if a file's own transfer rows don't net close to zero,
+  one side of a transfer is likely missing from it. Mechanical half of
+  issue #8's balance-assertion-reconciliation roadmap sketch; the
+  delta-surfacing half needs a product decision not made here.
+
+### Fixed — US tax law
+
+- `get_estimated_tax_deadlines()` hardcoded Q2/Q3 to 2024's (already
+  weekend-shifted) dates for every `tax_year` — 2025's real IRS dates
+  were a day off from what was returned. Computed per-year now.
+- `calculate_qbi_deduction()` implements the W-2 wages/UBIA limitation
+  for high-income non-SSTBs (issue #5's second gap, previously only
+  annotated as unimplemented) — defaults to $0 wage limit when not
+  provided, the common no-employee sole-proprietor case.
+
+### Added — Transaction correction tools
+
+`transaction_logger.delete_transaction()`, `unlink_transfer_pair()`, and
+`delete_import()` — no `delete_transaction` existed anywhere; the
+documented workaround ("delete the account and re-import") relied on a
+function that was itself broken until this release. Imports now stamp a
+shared `import_ref` (never actually generated before), so
+`delete_import(import_ref)` can undo an entire bad import in one call.
+
+### Added — Net-worth history backfill
+
+`net_worth_engine.backfill_net_worth_history(months=N)` derives monthly
+snapshots by walking cash-account balances backward through dated
+transaction history — a user importing years of data got a blank net
+worth chart until months of forward snapshots accumulated.
+
+### Added — MCP server (read-only)
+
+`scripts/mcp_server.py` — `import_preview` (always dry-run), `get_totals`,
+`get_budget_variance`, `get_net_worth`, `get_tax_summary` as MCP tools.
+Closes the structural dead end where claude.ai/Cowork users had no route
+to any local data at all (no CSV import, no local database, no bank
+sync). Optional dependency (`pip install finance-assistant[mcp]`). See
+`docs/MCP.md`.
+
+### Also
+
+- SKILL.md/skill.py wiring for previously-implemented-but-unreachable
+  features: live prices, subscriptions, backup/restore, audit log,
+  weekly digest, inbox watcher. Fixed a wrong section cross-reference and
+  a duplicate heading.
+- `doctor.py` gained a tesseract binary check (receipt OCR silently
+  failed without one; `--doctor` previously reported all-clear).
+- Found and fixed a real test-hygiene bug along the way: `audit_log.py`
+  is deliberately HOME-anchored (`~/.finance/audit.log`, by design), but
+  4 test files shadowed the shared test fixture without redirecting it —
+  every test run in this repo had been writing real entries into the
+  developer's actual home directory (7,249 lines accumulated before this
+  was caught). Production behavior is unchanged; only test isolation.
+
+### Tests (+54, of which 4 are MCP-only)
+
+Every fix in this release was revert-verified (stashed, confirmed the
+new test fails, restored) before merging. Full suite: 1,484 passed under
+Python <3.10 (was 1,434); 1,488 passed with Python 3.10+ and the `mcp`
+extra installed (`tests/test_mcp_server.py`'s 4 tests otherwise skip via
+`pytest.importorskip`).
+
 ## v3.16.0 — 2026-08-11
 
 ### Added — First-class transfer support ([#8](https://github.com/googlarz/finance-assistant/issues/8))

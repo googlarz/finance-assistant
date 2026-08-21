@@ -4,7 +4,7 @@ build-backend = "setuptools.backends.legacy:build"
 
 [project]
 name = "finance-assistant"
-version = "3.2.0"
+version = "4.0.0"
 description = "Personal finance copilot for Claude Code"
 readme = "README.md"
 requires-python = ">=3.10"
