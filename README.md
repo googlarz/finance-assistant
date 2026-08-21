@@ -2,8 +2,8 @@
 
 [![version](https://img.shields.io/badge/version-4.0.0-blue)](https://github.com/googlarz/finance-assistant/releases)
 [![tests](https://img.shields.io/badge/tests-1%2C519%20passing-brightgreen)](docs/ARCHITECTURE.md#testing)
-[![tax cases](https://img.shields.io/badge/tax%20law-33%20official%20cases-success)](#locales--validation)
-[![locales](https://img.shields.io/badge/locales-DE·UK·US·FR·NL·PL-orange)](#locales--validation)
+[![tax cases](https://img.shields.io/badge/tax%20law-39%20official%20cases-success)](#locales--validation)
+[![locales](https://img.shields.io/badge/locales-DE·UK·US·FR·NL·PL·IE-orange)](#locales--validation)
 [![local-first](https://img.shields.io/badge/local--first-no%20cloud-black)](docs/SECURITY.md)
 [![license](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey)](LICENSE)
 
@@ -11,7 +11,7 @@
 
 A personal finance copilot that applies actual tax statute to your real numbers — not estimates, not vibes. Runs locally through [Claude Code](https://claude.com/product/claude-code); your data never leaves your machine. Open source, free forever.
 
-`6 locales` · `14 bank formats + any file via LLM` · `Monte Carlo FIRE` · `1,519 tests`
+`7 locales` · `14 bank formats + any file via LLM` · `Monte Carlo FIRE` · `1,519 tests`
 
 **[→ Live demo](https://googlarz.github.io/finance-assistant/)** — see a real conversation without installing
 
@@ -61,7 +61,7 @@ FA:   Same $80k, two tax pictures (2024, single, federal):
         replaces the employer's FICA share. Break-even ≈ $82k. Want the rate?
 ```
 
-Every figure is deterministic Python applying real statute — and it's [validated against 33 official tax-authority test cases](#locales--validation). [More examples ↓](#more-conversations)
+Every figure is deterministic Python applying real statute — and it's [validated against 39 official tax-authority test cases](#locales--validation). [More examples ↓](#more-conversations)
 
 ---
 
@@ -77,7 +77,7 @@ If your country isn't covered, the [scaffold generator](#locales--validation) ma
 
 ## Why this over a general AI assistant?
 
-Any assistant can *talk* about money. The difference is **law-accurate, bracket-correct tax math for six countries**, computed by deterministic code — not a model guessing brackets. A general (or first-party) assistant gives you plausible estimates; this applies the actual statute (German EStG §32a, IRS Rev. Proc., HMRC PTM) to your real numbers, shows its work, and is tested against official authority cases.
+Any assistant can *talk* about money. The difference is **law-accurate, bracket-correct tax math for seven countries**, computed by deterministic code — not a model guessing brackets. A general (or first-party) assistant gives you plausible estimates; this applies the actual statute (German EStG §32a, IRS Rev. Proc., HMRC PTM) to your real numbers, shows its work, and is tested against official authority cases.
 
 | Instead of… | You get |
 |---|---|
@@ -86,7 +86,7 @@ Any assistant can *talk* about money. The difference is **law-accurate, bracket-
 | Generic ChatGPT: "your tax might be around…" | IRS Rev. Proc. 2024-40 applied to your actual income |
 | Spreadsheet FIRE model you rebuild yearly | Monte Carlo + named scenarios, saved and compared |
 | UK pension: 20 min of Googling carry-forward | 3-year carry-forward with HMRC PTM057200, in seconds |
-| A different tool per country | DE · UK · US · FR · NL · PL — same commands everywhere |
+| A different tool per country | DE · UK · US · FR · NL · PL · IE — same commands everywhere |
 
 ---
 
@@ -182,8 +182,9 @@ Tax rules live in country-specific plugins (a [git submodule](https://github.com
 | **`fr`** France | Quotient familial, décote, IR tranches, CSG/CRDS (assiette réduite) |
 | **`nl`** Netherlands | Box 1/2/3, heffingskorting, arbeidskorting (Box 3 Kerstarrest note) |
 | **`pl`** Poland | Polski Ład: 12%/32%, 30k PLN free amount, składka zdrowotna |
+| **`ie`** Ireland | Income tax bands, USC, PRSI, tax credits 2024–2026 |
 
-All six are validated against **33 official tax-authority test cases** (BMF, HMRC, DGFiP, Belastingdienst, KAS, IRS) — `python3 -m pytest locales/tests/test_validation.py -v`. US cases are computed independently from IRS Rev. Proc. 2023-34 and Schedule SE. Adding a country is independent of the main code — see the [locales repo](https://github.com/googlarz/finance-assistant-locales).
+All seven are validated against **39 official tax-authority test cases** (BMF, HMRC, DGFiP, Belastingdienst, KAS, IRS, Revenue) — `python3 -m pytest locales/tests/test_validation.py -v`. US cases are computed independently from IRS Rev. Proc. 2023-34 and Schedule SE. Adding a country is independent of the main code — see the [locales repo](https://github.com/googlarz/finance-assistant-locales).
 
 ---
 

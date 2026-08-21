@@ -252,7 +252,8 @@ If you're writing a new format parser or touching multi-account/transfer handlin
 | `locales/fr/` | French locale: quotient familial, décote, CSG/CRDS assiette réduite |
 | `locales/nl/` | Dutch locale: Box 1/2/3, heffingskorting, arbeidskorting, Box 3 uncertainty |
 | `locales/pl/` | Polish locale: Polski Ład 12%/32%, 30k PLN free amount, składka zdrowotna |
-| `locales/validation/` | 33 official test cases (BMF, HMRC, DGFiP, Belastingdienst, KAS, IRS) — all pass |
+| `locales/ie/` | Irish locale: income tax bands, USC, PRSI, tax credits 2024–2026 |
+| `locales/validation/` | 39 official test cases (BMF, HMRC, DGFiP, Belastingdienst, KAS, IRS, Revenue) — all pass |
 
 ### Data & Simulation
 
@@ -304,7 +305,7 @@ If you're writing a new format parser or touching multi-account/transfer handlin
 ```bash
 # Full suite (main + locales + official validation)
 python3 -m pytest tests/ locales/tests/ locales/validation/ -q
-# 1,237 tests — all modules, all locales, all official tax authority cases
+# 1,519 tests — all modules, all locales, all official tax authority cases
 
 python3 -m pytest tests/ -v                    # main skill only
 python3 -m pytest locales/tests/ -v            # locale tax tests
@@ -323,5 +324,5 @@ Tests use an isolated `.finance/` directory per test via the `isolated_finance_d
 | `tests/test_debt_optimizer.py` | Avalanche vs snowball, interest savings, debt-free date |
 | `tests/test_db.py` | SQLite schema init, CRUD operations, idempotent migration |
 | `tests/test_monte_carlo.py` | All 4 simulators, percentile ordering, probability bounds, seeded reproducibility |
-| `locales/tests/test_validation.py` | Official authority validation runner across all 6 locales |
-| `locales/validation/*/` | 33 cases from BMF, HMRC, DGFiP, Belastingdienst, KAS, IRS |
+| `locales/tests/test_validation.py` | Official authority validation runner across all 7 locales |
+| `locales/validation/*/` | 39 cases from BMF, HMRC, DGFiP, Belastingdienst, KAS, IRS, Revenue |
