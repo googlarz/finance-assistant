@@ -6,7 +6,9 @@ from profile_manager import update_profile
 from net_worth_engine import (
     calculate_net_worth, take_snapshot, get_snapshots,
     calculate_net_worth_trend, format_net_worth_display,
+    backfill_net_worth_history,
 )
+from transaction_logger import add_transaction
 
 
 def test_empty_net_worth(isolated_finance_dir):
@@ -56,6 +58,51 @@ def test_get_snapshots(isolated_finance_dir):
 def test_trend_no_history(isolated_finance_dir):
     trend = calculate_net_worth_trend()
     assert trend["trend"] == "no_history"
+
+
+def test_backfill_net_worth_history_derives_past_snapshot(isolated_finance_dir):
+    """Regression: calculate_net_worth_trend() returned trend='no_history'
+    until months of FORWARD snapshots accumulated — a user importing 2
+    years of transaction history got a blank net-worth chart even though
+    the data to reconstruct it already existed."""
+    from datetime import date, timedelta
+
+    add_account({"name": "Checking", "type": "checking", "current_balance": 1000})
+    # Dated today — happened AFTER last month's checkpoint, so it must be
+    # subtracted back out to reconstruct last month's balance.
+    add_transaction(date.today().isoformat(), "expense", -100, "food", "Groceries", account_id="checking")
+
+    result = backfill_net_worth_history(months=1)
+    assert result["created"] == 1
+
+    snaps = get_snapshots()
+    assert len(snaps) == 1
+    assert snaps[0]["source"] == "derived"
+    assert snaps[0]["net_worth"] == 1100.0  # 1000 - (-100) undone
+
+
+def test_backfill_net_worth_history_never_overwrites_existing_snapshot(isolated_finance_dir):
+    from datetime import date
+    import calendar
+    from net_worth_engine import get_net_worth_snapshot_path
+    from finance_storage import save_json
+
+    add_account({"name": "Checking", "type": "checking", "current_balance": 1000})
+
+    today = date.today()
+    y, m = today.year, today.month - 1 or 12
+    if today.month == 1:
+        y -= 1
+    last_day = calendar.monthrange(y, m)[1]
+    existing_date = date(y, m, last_day).isoformat()
+    save_json(get_net_worth_snapshot_path(existing_date), {"date": existing_date, "net_worth": 99999.0})
+
+    result = backfill_net_worth_history(months=1)
+    assert result["created"] == 0
+    assert result["skipped"] == 1
+
+    snaps = get_snapshots()
+    assert snaps[0]["net_worth"] == 99999.0  # untouched
 
 
 def test_format_display(isolated_finance_dir):

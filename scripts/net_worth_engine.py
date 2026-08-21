@@ -143,6 +143,116 @@ def take_snapshot() -> dict:
     return nw
 
 
+def backfill_net_worth_history(months: int = 12) -> dict:
+    """Derive historical net-worth snapshots from account transaction
+    history, for a user importing years of data who otherwise gets
+    trend='no_history' until months of forward snapshots accumulate.
+
+    Cash-accounts only (not holdings/debts — those have no dated history
+    to walk backward through in the same way). Each derived point is
+    clearly marked source='derived' so it's distinguishable from a real
+    take_snapshot() reading. Never overwrites an existing snapshot date,
+    real or derived.
+
+    Balance-as-of a past date = current_balance - sum(every transaction
+    on that account dated AFTER that checkpoint) — walking the running
+    balance backward through time.
+    """
+    from account_manager import get_accounts
+    from transaction_logger import get_transactions
+    import calendar as _calendar
+
+    try:
+        from profile_manager import get_profile
+        primary_currency = (get_profile() or {}).get("meta", {}).get("primary_currency", "EUR")
+    except Exception:
+        primary_currency = "EUR"
+
+    accounts = [a for a in get_accounts() if a.get("include_in_net_worth", True)]
+    if not accounts:
+        return {"created": 0, "skipped": 0, "note": "No accounts to derive history from."}
+
+    # Month-end checkpoints, oldest first, excluding the current month
+    # (take_snapshot() owns today; this only fills in the past).
+    today = date.today()
+    checkpoints = []
+    y, m = today.year, today.month
+    for _ in range(months):
+        m -= 1
+        if m == 0:
+            m, y = 12, y - 1
+        last_day = _calendar.monthrange(y, m)[1]
+        checkpoints.append(date(y, m, last_day))
+    checkpoints.reverse()
+
+    # Pull every transaction per account once, across the years the
+    # checkpoints span (plus the current year, since "after checkpoint"
+    # includes transactions up to today).
+    years_needed = {c.year for c in checkpoints} | {today.year}
+    txns_by_account: dict[str, list[dict]] = {}
+    for acc in accounts:
+        rows: list[dict] = []
+        for yr in years_needed:
+            rows.extend(get_transactions(account_id=acc["id"], year=yr))
+        txns_by_account[acc["id"]] = rows
+
+    created, skipped = 0, 0
+    for checkpoint in checkpoints:
+        date_str = checkpoint.isoformat()
+        if get_net_worth_snapshot_path(date_str).exists():
+            skipped += 1
+            continue
+
+        cash_assets = 0.0
+        cash_liabilities = 0.0
+        for acc in accounts:
+            current_balance = float(acc.get("current_balance") or 0.0)
+            after_checkpoint = sum(
+                float(t.get("amount", 0))
+                for t in txns_by_account[acc["id"]]
+                if t.get("date", "") > date_str
+            )
+            balance_then = current_balance - after_checkpoint
+            acc_currency = acc.get("currency", primary_currency)
+            if acc_currency == primary_currency:
+                converted = balance_then
+            else:
+                try:
+                    from currency import convert
+                    converted, _confidence = convert(balance_then, acc_currency, primary_currency)
+                except Exception:
+                    converted = balance_then
+            if acc.get("is_asset", True):
+                cash_assets += converted
+            else:
+                cash_liabilities += abs(converted)
+
+        net_worth = round(cash_assets - cash_liabilities, 2)
+        snapshot = {
+            "date": date_str,
+            "currency": primary_currency,
+            "net_worth": net_worth,
+            "total_assets": round(cash_assets, 2),
+            "total_liabilities": round(cash_liabilities, 2),
+            "breakdown": {
+                "cash_and_savings": round(cash_assets, 2),
+                "investments": 0.0,
+                "credit_card_balance": round(cash_liabilities, 2),
+                "loans_and_debt": 0.0,
+            },
+            "account_count": len(accounts),
+            "holding_count": 0,
+            "debt_count": 0,
+            "source": "derived",
+            "note": "Derived from account transaction history — cash accounts only, "
+                    "does not include investments or debts at that point in time.",
+        }
+        save_json(get_net_worth_snapshot_path(date_str), snapshot)
+        created += 1
+
+    return {"created": created, "skipped": skipped, "months_requested": months}
+
+
 def get_snapshots(start_date: Optional[str] = None, end_date: Optional[str] = None) -> list[dict]:
     """Retrieve net worth snapshots within a date range."""
     snapshot_dir = ensure_subdir("net_worth", "snapshots")
