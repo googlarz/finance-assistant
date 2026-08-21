@@ -9,7 +9,7 @@ import sqlite3
 from pathlib import Path
 from contextlib import contextmanager
 
-SCHEMA_VERSION = 3  # bumped: added transactions.transfer_peer_id column
+SCHEMA_VERSION = 4  # bumped: accounts current_balance/is_asset/as_of/... + transactions is_recurring/tags/tax_relevant/tax_category/business_use_pct/import_ref
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY);
@@ -24,9 +24,14 @@ CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     type TEXT NOT NULL,
-    balance REAL DEFAULT 0,
+    current_balance REAL DEFAULT 0,
     currency TEXT DEFAULT 'EUR',
     institution TEXT,
+    is_asset INTEGER DEFAULT 1,
+    as_of TEXT,
+    include_in_net_worth INTEGER DEFAULT 1,
+    include_in_budget INTEGER DEFAULT 1,
+    notes TEXT,
     updated_at TEXT NOT NULL
 );
 
@@ -43,6 +48,12 @@ CREATE TABLE IF NOT EXISTS transactions (
     payee TEXT,
     subcategory TEXT,        -- e.g. source bank's own "Credit Card Payment" (#8 Tier 2 window)
     transfer_peer_id TEXT,  -- id of the matching leg in a linked transfer pair (#8)
+    is_recurring INTEGER DEFAULT 0,
+    tags TEXT,
+    tax_relevant INTEGER DEFAULT 0,
+    tax_category TEXT,
+    business_use_pct REAL,
+    import_ref TEXT,
     created_at TEXT NOT NULL
 );
 
@@ -226,6 +237,53 @@ def _migrate_schema(conn, from_version: int) -> None:
                 conn.execute("ALTER TABLE transactions ADD COLUMN transfer_peer_id TEXT")
             if "subcategory" not in cols:
                 conn.execute("ALTER TABLE transactions ADD COLUMN subcategory TEXT")
+        except Exception:
+            pass
+
+    # v3 → v4: accounts.balance renamed to current_balance (was silently
+    # diverging from the JSON schema's field name — every consumer that
+    # reads get_accounts()/get_account() via SQLite was reading a missing
+    # key and getting defaults); add is_asset/as_of/include_in_net_worth/
+    # include_in_budget/notes so accounts fully round-trip through SQLite
+    # instead of falling back to is_asset's default (True, silently
+    # misclassifying every liability as an asset once the DB is active).
+    # Also add the 6 transactions columns that were schema-only in
+    # TRANSACTION_SCHEMA and silently dropped on the SQLite INSERT.
+    if from_version < 4:
+        try:
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(accounts)").fetchall()}
+            if "balance" in cols and "current_balance" not in cols:
+                conn.execute("ALTER TABLE accounts RENAME COLUMN balance TO current_balance")
+            elif "current_balance" not in cols:
+                conn.execute("ALTER TABLE accounts ADD COLUMN current_balance REAL DEFAULT 0")
+            if "is_asset" not in cols:
+                conn.execute("ALTER TABLE accounts ADD COLUMN is_asset INTEGER DEFAULT 1")
+                conn.execute(
+                    "UPDATE accounts SET is_asset = 0 WHERE type IN ('loan', 'mortgage', 'credit_card')"
+                )
+            if "as_of" not in cols:
+                conn.execute("ALTER TABLE accounts ADD COLUMN as_of TEXT")
+            if "include_in_net_worth" not in cols:
+                conn.execute("ALTER TABLE accounts ADD COLUMN include_in_net_worth INTEGER DEFAULT 1")
+            if "include_in_budget" not in cols:
+                conn.execute("ALTER TABLE accounts ADD COLUMN include_in_budget INTEGER DEFAULT 1")
+            if "notes" not in cols:
+                conn.execute("ALTER TABLE accounts ADD COLUMN notes TEXT")
+        except Exception:
+            pass
+
+        try:
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(transactions)").fetchall()}
+            for col, ddl in (
+                ("is_recurring", "INTEGER DEFAULT 0"),
+                ("tags", "TEXT"),
+                ("tax_relevant", "INTEGER DEFAULT 0"),
+                ("tax_category", "TEXT"),
+                ("business_use_pct", "REAL"),
+                ("import_ref", "TEXT"),
+            ):
+                if col not in cols:
+                    conn.execute(f"ALTER TABLE transactions ADD COLUMN {col} {ddl}")
         except Exception:
             pass
 

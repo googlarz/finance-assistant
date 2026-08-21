@@ -20,6 +20,14 @@ except ImportError:
     from currency import format_money
 
 
+def _db_available() -> bool:
+    try:
+        from db import is_initialized
+        return is_initialized()
+    except Exception:
+        return False
+
+
 GOAL_TYPES = {
     "emergency_fund":     "Emergency Fund",
     "house_down_payment": "House Down Payment",
@@ -67,7 +75,42 @@ def add_goal(goal_data: dict) -> dict:
     }
     goals.append(goal)
     _save_goals(goals)
+    _dual_write_goal(goal)
     return goal
+
+
+# goals used to be written to SQLite only once, by the first-boot migration
+# (db_migrate.py) — every goal added/updated after that point was invisible
+# to accountability_engine.check_goal_drift(), which reads goals SQLite-only.
+def _dual_write_goal(goal: dict) -> None:
+    if not _db_available():
+        return
+    try:
+        from db import get_conn
+        now = datetime.now().isoformat()
+        with get_conn() as conn:
+            conn.execute(
+                """INSERT INTO goals
+                   (id, name, target_amount, current_amount, target_date,
+                    currency, status, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(id) DO UPDATE SET
+                       name = excluded.name,
+                       target_amount = excluded.target_amount,
+                       current_amount = excluded.current_amount,
+                       target_date = excluded.target_date,
+                       currency = excluded.currency,
+                       status = excluded.status,
+                       updated_at = excluded.updated_at""",
+                (
+                    goal["id"], goal["name"], goal["target_amount"],
+                    goal["current_amount"], goal.get("target_date"),
+                    goal.get("currency", "EUR"), goal.get("status", "active"),
+                    goal.get("created_at", now), now,
+                ),
+            )
+    except Exception:
+        pass  # SQLite mirror is best-effort; JSON write above already succeeded
 
 
 def update_goal(goal_id: str, updates: dict) -> Optional[dict]:
@@ -77,6 +120,7 @@ def update_goal(goal_id: str, updates: dict) -> Optional[dict]:
             g.update(updates)
             goals[i] = g
             _save_goals(goals)
+            _dual_write_goal(g)
             return g
     return None
 
@@ -87,6 +131,13 @@ def delete_goal(goal_id: str) -> bool:
     if len(filtered) == len(goals):
         return False
     _save_goals(filtered)
+    if _db_available():
+        try:
+            from db import get_conn
+            with get_conn() as conn:
+                conn.execute("DELETE FROM goals WHERE id = ?", (goal_id,))
+        except Exception:
+            pass
     return True
 
 

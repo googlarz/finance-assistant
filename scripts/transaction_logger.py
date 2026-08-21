@@ -7,6 +7,7 @@ Transactions are stored per-account per-year in .finance/accounts/transactions/.
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 import uuid
@@ -192,6 +193,22 @@ def _save_transactions(account_id: str, year: int, transactions: list[dict]) -> 
     })
 
 
+def _row_to_transaction(row) -> dict:
+    """SQLite has no list/boolean type — tags is stored JSON-encoded and
+    is_recurring/tax_relevant as 0/1 INTEGER. Convert back so a SQLite-sourced
+    transaction looks identical to a JSON-sourced one."""
+    txn = dict(row)
+    if "tags" in txn:
+        try:
+            txn["tags"] = json.loads(txn["tags"]) if txn["tags"] else []
+        except (TypeError, ValueError):
+            txn["tags"] = []
+    for col in ("is_recurring", "tax_relevant"):
+        if col in txn and txn[col] is not None:
+            txn[col] = bool(txn[col])
+    return txn
+
+
 # ── Public API ───────────────────────────────────────────────────────────────
 
 def add_transaction(
@@ -248,8 +265,9 @@ def add_transaction(
                             """INSERT INTO transactions
                                (id, account_id, date, amount, type, currency,
                                 category, description, source, payee, subcategory,
-                                transfer_peer_id, created_at)
-                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                transfer_peer_id, is_recurring, tags, tax_relevant,
+                                tax_category, business_use_pct, import_ref, created_at)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                             (
                                 txn["id"],
                                 txn["account_id"],
@@ -263,6 +281,12 @@ def add_transaction(
                                 txn.get("payee"),
                                 txn.get("subcategory"),
                                 txn.get("transfer_peer_id"),
+                                int(bool(txn.get("is_recurring"))),
+                                json.dumps(txn.get("tags") or []),
+                                int(bool(txn.get("tax_relevant"))),
+                                txn.get("tax_category"),
+                                txn.get("business_use_pct"),
+                                txn.get("import_ref"),
                                 datetime.now().isoformat(),
                             ),
                         )
@@ -345,7 +369,7 @@ def get_transactions(
                     f"SELECT * FROM transactions WHERE {where} ORDER BY date",
                     params,
                 ).fetchall()
-            return [dict(r) for r in rows]
+            return [_row_to_transaction(r) for r in rows]
         except Exception as exc:
             print(
                 f"[finance_assistant] SQLite read failed, falling back to JSON: {exc}",

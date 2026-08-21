@@ -749,17 +749,21 @@ if __name__ == "__main__":
         sys.exit(0)
 
     if "--wipe-demo" in sys.argv:
-        # Removes ONLY demo-marked entities (DKB Demo account + linked txns).
-        # Real user data is untouched.
+        # Removes ONLY demo-marked entities (accounts, their transactions,
+        # goals, debts, the holding, and the demo profile). Real user data
+        # is untouched — see demo_data.wipe_demo_data()'s docstring.
         _setup_db()
         try:
-            from account_manager import list_accounts, delete_account
-            removed = 0
-            for acc in list_accounts():
-                if acc.get("name") == "DKB Demo" or acc.get("id", "").endswith("-demo"):
-                    delete_account(acc["id"])
-                    removed += 1
-            print(f"Removed {removed} demo account(s) and their data.")
+            from scripts.demo_data import wipe_demo_data
+            removed = wipe_demo_data()
+            print(
+                f"Removed {removed['accounts']} demo account(s), "
+                f"{removed['transactions']} transaction(s), "
+                f"{removed['goals']} goal(s), {removed['debts']} debt(s), "
+                f"{removed['holdings']} holding(s)."
+            )
+            if removed["profile_reset"]:
+                print("Demo profile reset — ready for real onboarding.")
         except Exception as exc:
             print(f"Demo wipe failed: {exc}", file=sys.stderr)
             sys.exit(1)

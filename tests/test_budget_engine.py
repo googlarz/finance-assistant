@@ -4,6 +4,7 @@ from datetime import datetime
 from budget_engine import (
     create_budget, get_budget, get_budget_variance,
     suggest_budget_from_history, format_budget_display,
+    update_budget_actuals, update_actual, get_variance,
 )
 from transaction_logger import add_transaction
 
@@ -75,3 +76,33 @@ def test_suggest_budget_from_history_excludes_transfers(isolated_finance_dir):
     assert "savings" not in suggestion["suggested_limits"]
     assert "investment" not in suggestion["suggested_limits"]
     assert "debt_payment" not in suggestion["suggested_limits"]
+
+
+# ── DB-present: update_actual() used to have zero callers ──────────────────
+
+def test_update_budget_actuals_db_present_syncs_actual_amount(isolated_finance_dir_db):
+    """Regression: budget_categories.actual_amount stayed 0 forever once the
+    DB was active — update_actual() existed but nothing called it, so
+    get_budget()'s SQLite branch (which reads actual_amount directly) always
+    reported 0 spent, and overspend/'warn' statuses could never fire."""
+    create_budget(2026, 4, category_limits={"food": 400, "transport": 200})
+    add_transaction("2026-04-01", "expense", -350, "food", "Groceries")
+
+    update_budget_actuals(2026, 4)
+
+    variance = get_variance("2026-04")
+    food = next(v for v in variance if v["category"] == "food")
+    assert food["actual"] == 350.0  # not the pre-fix 0
+    assert food["status"] == "warn"  # 350/400 = 87.5% > 85% threshold
+
+
+def test_update_actual_upserts_unbudgeted_category(isolated_finance_dir_db):
+    """A category with spending but no set limit has no pre-existing row —
+    update_actual() must upsert, not silently no-op on a bare UPDATE."""
+    create_budget(2026, 4, category_limits={"food": 400})
+    assert update_actual("2026-04", "surprise_category", 75.0) is True
+
+    variance = get_variance("2026-04")
+    surprise = next(v for v in variance if v["category"] == "surprise_category")
+    assert surprise["actual"] == 75.0
+    assert surprise["status"] == "unbudgeted"

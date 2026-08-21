@@ -77,6 +77,20 @@ def _save_accounts(accounts: list[dict]) -> None:
 
 # ── Public API ───────────────────────────────────────────────────────────────
 
+_BOOL_COLUMNS = ("is_asset", "include_in_net_worth", "include_in_budget")
+
+
+def _row_to_account(row) -> dict:
+    """SQLite has no boolean type — these are stored as 0/1 INTEGER. Convert
+    back to Python bool so callers doing `is True`/`is False` (as this
+    module's own smoke test does) see the same type as the JSON path."""
+    acc = dict(row)
+    for col in _BOOL_COLUMNS:
+        if col in acc and acc[col] is not None:
+            acc[col] = bool(acc[col])
+    return acc
+
+
 def list_accounts() -> list[dict]:
     """List all accounts. Reads from SQLite if available, else JSON."""
     if _db_available():
@@ -84,7 +98,7 @@ def list_accounts() -> list[dict]:
             from db import get_conn
             with get_conn() as conn:
                 rows = conn.execute("SELECT * FROM accounts ORDER BY name").fetchall()
-            return [dict(r) for r in rows]
+            return [_row_to_account(r) for r in rows]
         except Exception:
             pass
     return _load_accounts()
@@ -104,7 +118,7 @@ def get_account(account_id: str) -> Optional[dict]:
                     "SELECT * FROM accounts WHERE id = ?", (account_id,)
                 ).fetchone()
             if row:
-                return dict(row)
+                return _row_to_account(row)
         except Exception:
             pass
     for acc in _load_accounts():
@@ -142,8 +156,10 @@ def add_account(account_data: dict) -> dict:
             with get_conn() as conn:
                 conn.execute(
                     """INSERT OR REPLACE INTO accounts
-                       (id, name, type, balance, currency, institution, updated_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                       (id, name, type, current_balance, currency, institution,
+                        is_asset, as_of, include_in_net_worth, include_in_budget,
+                        notes, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         new["id"],
                         new["name"],
@@ -151,6 +167,11 @@ def add_account(account_data: dict) -> dict:
                         float(new.get("current_balance") or 0),
                         new.get("currency", "EUR"),
                         new.get("institution"),
+                        int(bool(new.get("is_asset", True))),
+                        new["as_of"],
+                        int(bool(new.get("include_in_net_worth", True))),
+                        int(bool(new.get("include_in_budget", True))),
+                        new.get("notes"),
                         new["as_of"],
                     ),
                 )
@@ -170,12 +191,20 @@ def update_balance(account_id: str, balance: float) -> Optional[dict]:
             from db import get_conn
             with get_conn() as conn:
                 conn.execute(
-                    "UPDATE accounts SET balance = ?, updated_at = ? WHERE id = ?",
+                    "UPDATE accounts SET current_balance = ?, updated_at = ? WHERE id = ?",
                     (round(balance, 2), now, account_id),
                 )
         except Exception:
             pass
     return update_account(account_id, {"current_balance": round(balance, 2)})
+
+
+# Columns SQLite actually has — only these can be dual-written; anything
+# else in ACCOUNT_SCHEMA (e.g. "id") stays JSON-only.
+_SQLITE_ACCOUNT_COLUMNS = {
+    "name", "type", "current_balance", "currency", "institution",
+    "is_asset", "include_in_net_worth", "include_in_budget", "notes",
+}
 
 
 def update_account(account_id: str, updates: dict) -> Optional[dict]:
@@ -185,14 +214,22 @@ def update_account(account_id: str, updates: dict) -> Optional[dict]:
             acc.update(updates)
             acc["as_of"] = datetime.now().date().isoformat()
             accounts[i] = acc
-            # Dual-write balance to SQLite
-            if _db_available() and "current_balance" in updates:
+            # Dual-write to SQLite — any updated field SQLite has a column for,
+            # not just current_balance (a rename/type change used to leave
+            # SQLite permanently stale since only current_balance was mirrored).
+            sqlite_updates = {k: v for k, v in updates.items() if k in _SQLITE_ACCOUNT_COLUMNS}
+            if _db_available() and sqlite_updates:
                 try:
                     from db import get_conn
+                    set_clause = ", ".join(f"{k} = ?" for k in sqlite_updates)
+                    values = [
+                        int(bool(v)) if k in _BOOL_COLUMNS else v
+                        for k, v in sqlite_updates.items()
+                    ]
                     with get_conn() as conn:
                         conn.execute(
-                            "UPDATE accounts SET balance = ?, updated_at = ? WHERE id = ?",
-                            (float(updates["current_balance"]), acc["as_of"], account_id),
+                            f"UPDATE accounts SET {set_clause}, as_of = ?, updated_at = ? WHERE id = ?",
+                            (*values, acc["as_of"], acc["as_of"], account_id),
                         )
                 except Exception:
                     pass
@@ -206,6 +243,13 @@ def delete_account(account_id: str) -> bool:
     filtered = [a for a in accounts if a["id"] != account_id]
     if len(filtered) == len(accounts):
         return False
+    if _db_available():
+        try:
+            from db import get_conn
+            with get_conn() as conn:
+                conn.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
+        except Exception:
+            pass
     _save_accounts(filtered)
     return True
 

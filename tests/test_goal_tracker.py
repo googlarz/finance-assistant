@@ -3,6 +3,7 @@ from goal_tracker import (
     get_goals, add_goal, update_goal, delete_goal,
     project_goal_completion, suggest_emergency_fund, format_goals_display,
 )
+from datetime import date, timedelta
 
 
 def test_empty_goals(isolated_finance_dir):
@@ -56,3 +57,37 @@ def test_format_display(isolated_finance_dir):
     display = format_goals_display()
     assert "Emergency" in display
     assert "50%" in display
+
+
+# ── DB-present: goals used to be SQLite-frozen after first-boot migration ──
+
+def test_add_goal_db_present_reaches_check_goal_drift(isolated_finance_dir_db):
+    """Regression: goals were written to SQLite only once, by the first-boot
+    migration — a goal added after that point was invisible to
+    accountability_engine.check_goal_drift(), which reads goals SQLite-only."""
+    from db import get_conn
+    from accountability_engine import check_goal_drift
+
+    created = (date.today() - timedelta(days=180)).isoformat()
+    target = (date.today() + timedelta(days=30)).isoformat()
+    goal = add_goal({
+        "name": "Behind Schedule", "type": "custom",
+        "target_amount": 10000, "current_amount": 100,  # way behind pace
+        "target_date": target,
+    })
+    # add_goal stamps created_at itself; overwrite it in both stores so the
+    # drift math has a real multi-month history to compare against.
+    update_goal(goal["id"], {"created_at": created})
+
+    with get_conn() as conn:
+        alerts = check_goal_drift(conn)
+    assert any(a["goal_name"] == "Behind Schedule" for a in alerts)
+
+
+def test_delete_goal_db_present_actually_deletes(isolated_finance_dir_db):
+    from db import get_conn
+    goal = add_goal({"name": "Test Goal", "type": "custom", "target_amount": 1000})
+    assert delete_goal(goal["id"]) is True
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM goals WHERE id = ?", (goal["id"],)).fetchone()
+    assert row is None

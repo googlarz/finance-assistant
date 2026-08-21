@@ -51,6 +51,51 @@ def _save_recurrings(items: list[dict]) -> None:
     })
 
 
+def _db_available() -> bool:
+    try:
+        from db import is_initialized
+        return is_initialized()
+    except Exception:
+        return False
+
+
+# recurring_items used to be written to SQLite only once, by the first-boot
+# migration — every item added/updated after that point was invisible to
+# overdraft_detector.project_inflows/project_outflows, which read
+# recurring_items SQLite-only.
+def _dual_write_recurring(item: dict) -> None:
+    if not _db_available():
+        return
+    try:
+        from db import get_conn
+        with get_conn() as conn:
+            conn.execute(
+                """INSERT INTO recurring_items
+                   (id, name, amount, frequency, day_of_month, category,
+                    account_id, start_date, currency, active)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(id) DO UPDATE SET
+                       name = excluded.name,
+                       amount = excluded.amount,
+                       frequency = excluded.frequency,
+                       day_of_month = excluded.day_of_month,
+                       category = excluded.category,
+                       account_id = excluded.account_id,
+                       start_date = excluded.start_date,
+                       currency = excluded.currency,
+                       active = excluded.active""",
+                (
+                    item["id"], item["name"], item["amount"], item["frequency"],
+                    item.get("day_of_month"), item.get("category"),
+                    item.get("account_id"), item.get("start_date"),
+                    item.get("currency", "EUR"),
+                    int(item.get("status", "active") == "active"),
+                ),
+            )
+    except Exception:
+        pass  # SQLite mirror is best-effort; JSON write above already succeeded
+
+
 # ── Public API ───────────────────────────────────────────────────────────────
 
 def add_recurring(
@@ -86,6 +131,7 @@ def add_recurring(
     }
     items.append(item)
     _save_recurrings(items)
+    _dual_write_recurring(item)
     return item
 
 
@@ -100,6 +146,7 @@ def update_recurring(recurring_id: str, updates: dict) -> Optional[dict]:
             item.update(updates)
             items[i] = item
             _save_recurrings(items)
+            _dual_write_recurring(item)
             return item
     return None
 
@@ -110,6 +157,13 @@ def delete_recurring(recurring_id: str) -> bool:
     if len(filtered) == len(items):
         return False
     _save_recurrings(filtered)
+    if _db_available():
+        try:
+            from db import get_conn
+            with get_conn() as conn:
+                conn.execute("DELETE FROM recurring_items WHERE id = ?", (recurring_id,))
+        except Exception:
+            pass
     return True
 
 

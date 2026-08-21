@@ -415,3 +415,104 @@ def test_init_db_v2_upgrade_is_idempotent(tmp_path, monkeypatch):
     with get_conn() as conn:
         ver = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
     assert ver == SCHEMA_VERSION
+
+
+def _make_v3_db(tmp_path):
+    """A DB with the OLD accounts.balance column name (no current_balance,
+    no is_asset), version stamped 3 — simulating an install that pre-dates
+    SCHEMA_VERSION 4. Has one liability-type account (credit_card) to prove
+    the is_asset backfill classifies it correctly, not just adds the column."""
+    import sqlite3
+    from db import get_db_path
+    path = get_db_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(path))
+    conn.executescript(
+        """
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
+        CREATE TABLE accounts (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            balance REAL DEFAULT 0,
+            currency TEXT DEFAULT 'EUR',
+            institution TEXT,
+            updated_at TEXT NOT NULL
+        );
+        CREATE TABLE transactions (
+            id TEXT PRIMARY KEY,
+            account_id TEXT,
+            date TEXT,
+            amount REAL,
+            type TEXT DEFAULT 'expense',
+            currency TEXT,
+            category TEXT,
+            description TEXT,
+            source TEXT,
+            payee TEXT,
+            subcategory TEXT,
+            transfer_peer_id TEXT,
+            created_at TEXT
+        );
+        INSERT INTO schema_version (version) VALUES (3);
+        INSERT INTO accounts (id, name, type, balance, currency, updated_at)
+        VALUES ('chk', 'Checking', 'checking', 1000.0, 'EUR', '2026-01-01');
+        INSERT INTO accounts (id, name, type, balance, currency, updated_at)
+        VALUES ('visa', 'Visa', 'credit_card', -450.0, 'EUR', '2026-01-01');
+        """
+    )
+    conn.commit()
+    conn.close()
+    return path
+
+
+def test_init_db_upgrades_v3_db_renames_balance_and_backfills_is_asset(tmp_path, monkeypatch):
+    """Regression: init_db() must self-heal a v3 DB — rename accounts.balance
+    to current_balance (was silently diverging from the JSON schema's field
+    name), add is_asset/as_of/include_in_net_worth/include_in_budget/notes,
+    and backfill is_asset=0 for existing liability-type rows so they don't
+    default to True (misclassified as an asset) — without disturbing the
+    existing balances."""
+    monkeypatch.setenv("FINANCE_PROJECT_DIR", str(tmp_path))
+    _make_v3_db(tmp_path)
+
+    from db import init_db, get_conn, SCHEMA_VERSION
+    init_db()  # must not raise "no such column: current_balance"
+
+    with get_conn() as conn:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(accounts)").fetchall()}
+        assert "current_balance" in cols
+        assert "balance" not in cols  # renamed, not duplicated
+        assert "is_asset" in cols
+        assert "as_of" in cols
+        assert "include_in_net_worth" in cols
+        assert "include_in_budget" in cols
+        assert "notes" in cols
+
+        ver = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
+        assert ver == SCHEMA_VERSION
+
+        chk = conn.execute("SELECT * FROM accounts WHERE id='chk'").fetchone()
+        assert chk["current_balance"] == 1000.0
+        assert bool(chk["is_asset"]) is True
+
+        visa = conn.execute("SELECT * FROM accounts WHERE id='visa'").fetchone()
+        assert visa["current_balance"] == -450.0
+        assert bool(visa["is_asset"]) is False  # backfilled, not defaulted to True
+
+        tx_cols = {r[1] for r in conn.execute("PRAGMA table_info(transactions)").fetchall()}
+        for col in ("is_recurring", "tags", "tax_relevant", "tax_category", "business_use_pct", "import_ref"):
+            assert col in tx_cols
+
+
+def test_init_db_v3_upgrade_is_idempotent(tmp_path, monkeypatch):
+    monkeypatch.setenv("FINANCE_PROJECT_DIR", str(tmp_path))
+    _make_v3_db(tmp_path)
+    from db import init_db, get_conn, SCHEMA_VERSION
+    init_db()
+    init_db()
+    with get_conn() as conn:
+        ver = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(accounts)").fetchall()}
+    assert ver == SCHEMA_VERSION
+    assert "current_balance" in cols

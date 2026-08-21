@@ -171,6 +171,8 @@ Have a conversation, not a form. Ask one small batch at a time, explain why you'
 
 If they say yes, run `python3 skill.py --demo`. Otherwise begin onboarding.
 
+**Before starting real onboarding, if demo data exists, wipe it first.** Check with `python3 skill.py --demo` (it reports "already present" vs "seeded") or just run `python3 skill.py --wipe-demo` unconditionally before the first real question — it's a safe no-op if no demo data exists. This is what makes the "wiped the moment you start real setup" promise above actually true; skipping it leaves the demo's "Alex" profile and sample accounts mixed in with the user's real data.
+
 Collect naturally in small batches:
 - Where they are and what currency they use
 - Rough income and employment picture

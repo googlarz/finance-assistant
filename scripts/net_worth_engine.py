@@ -54,7 +54,8 @@ def calculate_net_worth() -> dict:
         if not _convert or cur == _primary_currency:
             return amount
         try:
-            return convert(amount, cur, _primary_currency)
+            converted_amount, _confidence = convert(amount, cur, _primary_currency)
+            return converted_amount
         except Exception as exc:
             if (cur, _primary_currency) not in _warned_pairs:
                 _warned_pairs.add((cur, _primary_currency))
@@ -84,7 +85,10 @@ def calculate_net_worth() -> dict:
 
     # Debts
     debts = get_debts()
-    debt_total = sum(float(d.get("balance", 0)) for d in debts)
+    debt_total = sum(
+        _to_primary(float(d.get("balance", 0)), d.get("currency", _primary_currency))
+        for d in debts
+    )
 
     total_assets = cash_assets + investment_value
     total_liabilities = cash_liabilities + debt_total
@@ -113,6 +117,29 @@ def take_snapshot() -> dict:
     nw = calculate_net_worth()
     today = date.today().isoformat()
     save_json(get_net_worth_snapshot_path(today), nw)
+
+    # Snapshots used to be written to SQLite only once, by the first-boot
+    # migration — every snapshot taken after that point was invisible to
+    # timeline_engine, which reads the "net_worth" snapshot type SQLite-only.
+    try:
+        from db import get_conn, is_initialized
+        if is_initialized():
+            import json as _json
+            with get_conn() as conn:
+                # Delete+insert, not plain INSERT — matches the JSON path's
+                # overwrite-per-day semantics (no UNIQUE(type, date) constraint
+                # exists on this table, so a same-day retake would otherwise
+                # accumulate duplicate rows).
+                conn.execute(
+                    "DELETE FROM snapshots WHERE type = ? AND date = ?", ("net_worth", today)
+                )
+                conn.execute(
+                    "INSERT INTO snapshots (type, date, data) VALUES (?, ?, ?)",
+                    ("net_worth", today, _json.dumps(nw)),
+                )
+    except Exception:
+        pass  # SQLite mirror is best-effort; JSON write above already succeeded
+
     return nw
 
 
@@ -175,27 +202,28 @@ def calculate_net_worth_trend(months: int = 12) -> dict:
 def format_net_worth_display() -> str:
     nw = calculate_net_worth()
     bd = nw["breakdown"]
+    cur = nw["currency"]
 
     lines = [
         "═══ Your Net Worth ═══\n",
-        f"  Net Worth: {format_money(nw['net_worth'], 'EUR')}\n",
+        f"  Net Worth: {format_money(nw['net_worth'], cur)}\n",
         "  Assets:",
-        f"    Cash & Savings:  {format_money(bd['cash_and_savings'], 'EUR')}",
-        f"    Investments:     {format_money(bd['investments'], 'EUR')}",
-        f"    Total Assets:    {format_money(nw['total_assets'], 'EUR')}\n",
+        f"    Cash & Savings:  {format_money(bd['cash_and_savings'], cur)}",
+        f"    Investments:     {format_money(bd['investments'], cur)}",
+        f"    Total Assets:    {format_money(nw['total_assets'], cur)}\n",
         "  Liabilities:",
-        f"    Credit Cards:    {format_money(bd['credit_card_balance'], 'EUR')}",
-        f"    Loans & Debt:    {format_money(bd['loans_and_debt'], 'EUR')}",
-        f"    Total Liab.:     {format_money(nw['total_liabilities'], 'EUR')}\n",
+        f"    Credit Cards:    {format_money(bd['credit_card_balance'], cur)}",
+        f"    Loans & Debt:    {format_money(bd['loans_and_debt'], cur)}",
+        f"    Total Liab.:     {format_money(nw['total_liabilities'], cur)}\n",
         f"  ══════════════════════",
-        f"  NET WORTH:         {format_money(nw['net_worth'], 'EUR')}",
+        f"  NET WORTH:         {format_money(nw['net_worth'], cur)}",
     ]
 
     # Add trend if available
     trend = calculate_net_worth_trend()
     if trend["trend"] not in ("no_history", "insufficient_data"):
         sign = "+" if trend["change"] >= 0 else ""
-        lines.append(f"\n  Trend: {sign}{format_money(trend['change'], 'EUR')} ({sign}{trend['change_pct']}%)")
+        lines.append(f"\n  Trend: {sign}{format_money(trend['change'], cur)} ({sign}{trend['change_pct']}%)")
         lines.append(f"  Since: {trend['first_snapshot_date']}")
 
     return "\n".join(lines)

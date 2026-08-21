@@ -16,9 +16,24 @@ for p in (PROJECT_ROOT, SCRIPTS_DIR):
 
 @pytest.fixture(autouse=True)
 def isolated_finance_dir(tmp_path, monkeypatch):
-    """Every test gets its own .finance/ directory."""
+    """Every test gets its own .finance/ directory. JSON-only — SQLite is not
+    initialized, so dual-path code exercises only its JSON branch here. See
+    isolated_finance_dir_db for the DB-present variant."""
     monkeypatch.setenv("FINANCE_PROJECT_DIR", str(tmp_path))
     yield tmp_path
+
+
+@pytest.fixture
+def isolated_finance_dir_db(isolated_finance_dir):
+    """DB-present variant: same isolated .finance/ dir, but with init_db()
+    called so dual-path code (account_manager, transaction_logger,
+    budget_engine, ...) exercises its SQLite branch. Opt-in per test rather
+    than autouse, so existing JSON-path coverage is untouched — request this
+    fixture explicitly for tests that must prove SQLite-branch correctness."""
+    from db import init_db, is_initialized
+    init_db()
+    assert is_initialized(), "init_db() ran but is_initialized() is False — fixture is broken"
+    yield isolated_finance_dir
 
 
 @pytest.fixture

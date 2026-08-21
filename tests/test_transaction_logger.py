@@ -136,3 +136,31 @@ def test_summary_display(isolated_finance_dir):
     add_transaction("2026-04-01", "expense", -100, "food", "REWE")
     display = get_summary_display(year=2026, month=4)
     assert "food" in display.lower() or "Food" in display
+
+
+# ── DB-present: 6 TRANSACTION_SCHEMA fields used to be silently dropped ──
+
+def test_db_present_round_trips_previously_dropped_fields(isolated_finance_dir_db):
+    """Regression: the SQLite INSERT only listed 13 columns while
+    TRANSACTION_SCHEMA has 18 — is_recurring, tags, tax_relevant,
+    tax_category, business_use_pct, and import_ref were silently dropped on
+    the SQLite side, even though transaction_normalizer/recurring_engine/
+    receipt_scanner all populate them on write. Since get_transactions()
+    prefers SQLite when available, these fields vanished from every read
+    once the DB was active."""
+    add_transaction(
+        "2026-04-01", "expense", -45.50, "subscriptions", "Netflix",
+        is_recurring=True, tags=["streaming", "monthly"],
+        tax_relevant=True, tax_category="home_office",
+        business_use_pct=30.0, import_ref="import-abc123",
+    )
+
+    txns = get_transactions(year=2026)
+    assert len(txns) == 1
+    t = txns[0]
+    assert t["is_recurring"] is True
+    assert t["tags"] == ["streaming", "monthly"]
+    assert t["tax_relevant"] is True
+    assert t["tax_category"] == "home_office"
+    assert t["business_use_pct"] == 30.0
+    assert t["import_ref"] == "import-abc123"

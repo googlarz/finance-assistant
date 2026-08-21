@@ -66,8 +66,10 @@ def migrate_all(finance_dir: Path) -> dict:
             for acc in accounts:
                 conn.execute(
                     """INSERT OR IGNORE INTO accounts
-                       (id, name, type, balance, currency, institution, updated_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                       (id, name, type, current_balance, currency, institution,
+                        is_asset, as_of, include_in_net_worth, include_in_budget,
+                        notes, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         acc.get("id", ""),
                         acc.get("name", ""),
@@ -75,6 +77,11 @@ def migrate_all(finance_dir: Path) -> dict:
                         float(acc.get("current_balance") or 0),
                         acc.get("currency", "EUR"),
                         acc.get("institution"),
+                        int(bool(acc.get("is_asset", True))),
+                        acc.get("as_of") or now,
+                        int(bool(acc.get("include_in_net_worth", True))),
+                        int(bool(acc.get("include_in_budget", True))),
+                        acc.get("notes"),
                         acc.get("as_of") or now,
                     ),
                 )

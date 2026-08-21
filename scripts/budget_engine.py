@@ -22,17 +22,17 @@ except ImportError:
     from currency import format_money
 
 
-_DB_AVAILABLE: Optional[bool] = None
-
-
 def _db_available() -> bool:
-    global _DB_AVAILABLE
-    if _DB_AVAILABLE is None:
-        try:
-            from db import is_initialized
-            _DB_AVAILABLE = is_initialized()
-        except Exception:
-            _DB_AVAILABLE = False
+    # Checked fresh every call, not cached — a process can initialize SQLite
+    # after this module has already run once with the DB absent (onboarding,
+    # a long-running session); caching the first result would then skip
+    # SQLite forever for the rest of the process, permanently. Every other
+    # dual-path module (account_manager, transaction_logger) already does this.
+    try:
+        from db import is_initialized
+        return is_initialized()
+    except Exception:
+        return False
     return _DB_AVAILABLE
 
 
@@ -157,11 +157,16 @@ def update_actual(month: str, category: str, amount: float) -> bool:
         try:
             from db import get_conn
             with get_conn() as conn:
+                # Upsert, not plain UPDATE: a category with spending but no set
+                # limit (unbudgeted) has no existing row, and a bare UPDATE
+                # would silently affect 0 rows — matching the JSON path, which
+                # tracks actuals for any category, limit or not.
                 conn.execute(
-                    """UPDATE budget_categories
-                       SET actual_amount = ?
-                       WHERE month = ? AND category = ?""",
-                    (round(amount, 2), month, category),
+                    """INSERT INTO budget_categories (month, category, limit_amount, actual_amount)
+                       VALUES (?, ?, 0, ?)
+                       ON CONFLICT(month, category) DO UPDATE SET
+                           actual_amount = excluded.actual_amount""",
+                    (month, category, round(amount, 2)),
                 )
             return True
         except Exception as exc:
@@ -233,6 +238,15 @@ def update_budget_actuals(
 
     budget["actuals"] = actuals
     budget["last_refreshed"] = datetime.now().isoformat()
+
+    # Dual-write: sync SQLite's actual_amount per category too — update_actual()
+    # used to have zero callers, so budget_categories.actual_amount stayed 0
+    # forever once the DB was active, even though get_budget()'s SQLite branch
+    # reads from that exact column and prefers it over JSON.
+    month_key = f"{year}-{month:02d}" if month else str(year)
+    for cat, data in actuals.items():
+        update_actual(month_key, cat, data.get("spent", 0.0))
+
     save_json(get_budget_path(year, month), budget)
     return budget
 

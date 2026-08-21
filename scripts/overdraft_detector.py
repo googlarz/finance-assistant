@@ -35,14 +35,14 @@ def get_account_balance(conn, account_id: str = None) -> float:
     """
     if account_id is not None:
         row = conn.execute(
-            "SELECT balance FROM accounts WHERE id = ?", (account_id,)
+            "SELECT current_balance FROM accounts WHERE id = ?", (account_id,)
         ).fetchone()
-        return float(row["balance"]) if row else 0.0
+        return float(row["current_balance"]) if row else 0.0
     else:
         rows = conn.execute(
-            "SELECT balance FROM accounts WHERE type IN ('checking', 'savings')"
+            "SELECT current_balance FROM accounts WHERE type IN ('checking', 'savings')"
         ).fetchall()
-        return sum(float(r["balance"]) for r in rows)
+        return sum(float(r["current_balance"]) for r in rows)
 
 
 def project_inflows(conn, days: int = 90) -> list[dict]:

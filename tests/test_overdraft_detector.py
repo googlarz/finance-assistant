@@ -33,7 +33,7 @@ def _setup_db(conn):
 
 def _add_account(conn, acct_id="acc1", type_="checking", balance=1000.0):
     conn.execute(
-        "INSERT OR REPLACE INTO accounts (id, name, type, balance, currency, updated_at) "
+        "INSERT OR REPLACE INTO accounts (id, name, type, current_balance, currency, updated_at) "
         "VALUES (?, ?, ?, ?, 'EUR', '2025-01-01')",
         (acct_id, acct_id, type_, balance),
     )

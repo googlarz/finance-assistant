@@ -1,6 +1,6 @@
 """Tests for recurring_engine.py — focusing on calendar-aware day clamping."""
 from datetime import date
-from recurring_engine import _calculate_due_dates
+from recurring_engine import _calculate_due_dates, add_recurring, delete_recurring
 
 
 def _make_item(day_of_month: int, freq: str = "monthly", start: str = "2024-01-01") -> dict:
@@ -57,3 +57,30 @@ def test_quarterly_day31_clamps_correctly():
     # Quarterly from Jan 1: Apr 30 (April has 30 days), Jul 31
     assert date(2025, 4, 30) in dates, f"Expected Apr 30, got {dates}"
     assert date(2025, 7, 31) in dates, f"Expected Jul 31, got {dates}"
+
+
+# ── DB-present: recurring_items used to be SQLite-frozen after migration ──
+
+def test_add_recurring_db_present_reaches_overdraft_projection(isolated_finance_dir_db):
+    """Regression: recurring_items were written to SQLite only once, by the
+    first-boot migration — an item added after that point was invisible to
+    overdraft_detector.project_inflows/project_outflows, which read
+    recurring_items SQLite-only."""
+    from db import get_conn
+    from overdraft_detector import project_outflows
+
+    add_recurring("Netflix", -15.0, "subscriptions", frequency="monthly",
+                   account_id="chk", day_of_month=5)
+
+    with get_conn() as conn:
+        outflows = project_outflows(conn, days=60)
+    assert any("Netflix" in o["description"] for o in outflows)
+
+
+def test_delete_recurring_db_present_actually_deletes(isolated_finance_dir_db):
+    from db import get_conn
+    item = add_recurring("Gym", -30.0, "subscriptions")
+    assert delete_recurring(item["id"]) is True
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM recurring_items WHERE id = ?", (item["id"],)).fetchone()
+    assert row is None
