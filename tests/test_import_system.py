@@ -151,6 +151,47 @@ def test_normalize_transactions():
 
 def test_is_tax_relevant():
     assert _is_tax_relevant("education") is True
+
+
+# ── Source-category mapping (#6 items 1/3) ──────────────────────────────────
+
+def test_normalize_transactions_uses_source_category_over_keyword_guess():
+    """Regression: subcategory = source_category was only ever set inside
+    the transfer-detection branch — non-transfer rows discarded the bank's
+    own Category column entirely in favor of keyword auto_categorize(),
+    which per issue #6 left "well over half" of a real export in
+    other_expense/other_income. A description with no matching keyword
+    ("XYZ CORP 4471") would otherwise fall to other_expense."""
+    raw = [{
+        "date": "2026-04-01", "amount": -85.32, "description": "XYZ CORP 4471",
+        "payee": "", "source_category": "Groceries",
+    }]
+    normalized = normalize_transactions(raw, "checking", "monarch", "USD")
+    assert normalized[0]["category"] == "food"  # from the map, not other_expense
+
+
+def test_normalize_transactions_falls_back_to_keywords_when_unmapped():
+    """An unrecognized source category (or one not in the map) must not
+    break — falls through to the existing keyword guess unchanged."""
+    raw = [{
+        "date": "2026-04-01", "amount": -20.0, "description": "REWE Berlin",
+        "payee": "", "source_category": "Some Category Not In The Map",
+    }]
+    normalized = normalize_transactions(raw, "checking", "monarch", "EUR")
+    assert normalized[0]["category"] == "food"  # via auto_categorize keyword match
+
+
+def test_normalize_transactions_transfer_rows_unaffected_by_category_map():
+    """Transfer rows must keep going through the existing Tier 1 path — the
+    category map must never fire for them (avoids double-assigning
+    subcategory or shadowing the transfer type logic)."""
+    raw = [{
+        "date": "2026-04-01", "amount": -500.0, "description": "Internal Transfer",
+        "payee": "", "source_category": "Transfer",
+    }]
+    normalized = normalize_transactions(raw, "checking", "monarch", "USD")
+    assert normalized[0]["type"] == "transfer"
+    assert normalized[0]["subcategory"] == "Transfer"
     assert _is_tax_relevant("entertainment") is False
 
 

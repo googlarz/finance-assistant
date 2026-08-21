@@ -8,13 +8,13 @@ from __future__ import annotations
 from typing import Optional
 
 try:
-    from transaction_logger import auto_categorize, TRANSACTION_SCHEMA
-    from csv_importer import TRANSFER_CATEGORIES, _YNAB_TRANSFER_PAYEE_PREFIX
+    from transaction_logger import auto_categorize, TRANSACTION_SCHEMA, ALL_CATEGORIES
+    from csv_importer import TRANSFER_CATEGORIES, _YNAB_TRANSFER_PAYEE_PREFIX, SOURCE_CATEGORY_MAP
 except ImportError:
     import os, sys
     sys.path.insert(0, os.path.dirname(__file__))
-    from transaction_logger import auto_categorize, TRANSACTION_SCHEMA
-    from csv_importer import TRANSFER_CATEGORIES, _YNAB_TRANSFER_PAYEE_PREFIX
+    from transaction_logger import auto_categorize, TRANSACTION_SCHEMA, ALL_CATEGORIES
+    from csv_importer import TRANSFER_CATEGORIES, _YNAB_TRANSFER_PAYEE_PREFIX, SOURCE_CATEGORY_MAP
 
 
 def _detect_transfer_type(raw: dict, source_format: str) -> Optional[str]:
@@ -38,6 +38,21 @@ def _detect_transfer_type(raw: dict, source_format: str) -> Optional[str]:
     return None
 
 
+def _map_source_category(raw: dict, source_format: str) -> Optional[str]:
+    """Map the source bank's own category string to the internal taxonomy
+    (#6 items 1/3). Only for non-transfer rows — Tier 1 transfer detection
+    (above) and its subcategory preservation already handle transfer rows.
+    Returns an internal category key, or None if there's no mapping (falls
+    through to auto_categorize())."""
+    source_category = (raw.get("source_category") or "").strip()
+    if not source_category:
+        return None
+    mapped = SOURCE_CATEGORY_MAP.get(source_format, {}).get(source_category)
+    if mapped and mapped in ALL_CATEGORIES:
+        return mapped
+    return None
+
+
 def normalize_transactions(
     raw_transactions: list[dict],
     account_id: str,
@@ -55,12 +70,6 @@ def normalize_transactions(
         description = raw.get("description", "")
         payee = raw.get("payee", "")
 
-        # Auto-categorize
-        category, subcategory = auto_categorize(
-            f"{payee} {description}",
-            amount,
-        )
-
         # Determine type: explicit parser type > Tier 1 structural signal > sign fallback.
         txn_type = raw.get("type")
         source_category = (raw.get("source_category") or "").strip()
@@ -68,11 +77,24 @@ def normalize_transactions(
             txn_type = _detect_transfer_type(raw, source_format)
         if not txn_type:
             txn_type = "income" if amount > 0 else "expense"
-        elif txn_type == "transfer" and source_category:
+
+        if txn_type == "transfer" and source_category:
             # Preserve the bank's own transfer-ish category (e.g. "Credit Card
             # Payment") in subcategory — Tier 2 pairing uses it to pick the
             # settlement window without needing to re-parse the source file.
+            category, subcategory = auto_categorize(f"{payee} {description}", amount)
             subcategory = source_category
+        else:
+            # #6 items 1/3: try the source bank's own category first (Monarch/
+            # Mint's Category column) — auto_categorize()'s keyword guessing
+            # alone left "well over half" of a real export's rows in
+            # other_expense/other_income. Falls through unchanged when
+            # there's no mapping for this source_format/category.
+            mapped_category = _map_source_category(raw, source_format)
+            if mapped_category:
+                category, subcategory = mapped_category, None
+            else:
+                category, subcategory = auto_categorize(f"{payee} {description}", amount)
 
         txn = {
             "date": raw.get("date", ""),
