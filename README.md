@@ -1,6 +1,6 @@
 # Finance Assistant
 
-[![version](https://img.shields.io/badge/version-4.0.0-blue)](https://github.com/googlarz/finance-assistant/releases)
+[![version](https://img.shields.io/badge/version-4.0.1-blue)](https://github.com/googlarz/finance-assistant/releases)
 [![tests](https://img.shields.io/badge/tests-1%2C519%20passing-brightgreen)](docs/ARCHITECTURE.md#testing)
 [![tax cases](https://img.shields.io/badge/tax%20law-39%20official%20cases-success)](#locales--validation)
 [![locales](https://img.shields.io/badge/locales-DE·UK·US·FR·NL·PL·IE-orange)](#locales--validation)

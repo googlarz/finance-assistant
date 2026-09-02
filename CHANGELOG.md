@@ -1,5 +1,28 @@
 # Changelog
 
+## v4.0.1 — 2026-08-21
+
+### Fixed — 13 bugs found in a targeted audit (money-correctness, crashes, silent data loss)
+
+**Tax correctness (locales submodule):**
+- DE: Günstigerprüfung (§ 31 EStG) dropped the Kindergeld clawback when the Kinderfreibetrag was more favorable — overstated refunds by exactly the annual Kindergeld amount (€3,060 in the verified case, married filer, 1 child, €600k income).
+- DE: 2024's non-advised filing deadline was hardcoded to 2026-04-30, contradicting its own inline comment and the documented § 149 Abs. 2 AO rule; 2025's advised deadline had the same one-year-late defect. Both now computed from the standard rule.
+- FR: the plafonnement du quotient familial compared against a flat 1-part reference regardless of marital status, wrongly capping the uncapped base marital-splitting benefit — ~€19,339 overtaxed for a childless married couple at €400k.
+- UK: 2026's tax-year rules had no `scottish_bands` key — Scottish taxpayers silently fell back to rUK bands/rates, mislabeled `tax_system="UK (rUK)"`.
+- NL: the 30%-regeling was detected (`expat_30_ruling_detected` surfaced in the breakdown) but never applied — ruling expats were taxed on 100% of gross.
+
+**Logic and crashes:**
+- `scenario_engine.compare_debt_payoff_vs_invest`: double-counted the cost of debt (subtracted both remaining principal and cumulative interest), biasing the comparison toward "pay debt first".
+- `scenario_engine.compare_rent_vs_buy`: dropped `maintenance_rate` from the renter's investable-savings calculation, biasing toward "buy".
+- `monte_carlo._simulate_net_worth`: property appreciation and debt paydown were computed but never credited to the running net-worth total — verified a mortgaged homeowner could simulate to a *lower* net worth than an identical debt-free household.
+- `investment_returns.xirr_value()`: crashed with `TypeError` on `approximate_xirr()`'s documented "insufficient data" result; now returns `None`.
+- `household.log_shared_expense`: an all-zero expense split raised an uncaught `ZeroDivisionError` instead of a clean `ValueError`.
+- `mt940_importer`: field 61's reversal marks (RC/RD) were silently dropped — the regex only matched plain C/D.
+- `ofx_importer`: comma-decimal amounts from non-compliant European OFX exports were inflated 100x by the thousands-separator stripping logic.
+- `receipt_scanner._preprocess_image`: image file handles were never deterministically closed, risking fd exhaustion on a batch of receipts.
+
+Every fix is revert-verified (a regression test that genuinely fails without it). Full suite: 1,534 passed (was 1,519).
+
 ## v4.0.0 — 2026-08-21
 
 ### Breaking — Python 3.10+ required
