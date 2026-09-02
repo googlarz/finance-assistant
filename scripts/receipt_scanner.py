@@ -56,7 +56,11 @@ def _preprocess_image(image_path: str):
     Steps: grayscale → contrast enhance → threshold (Otsu-like binarize).
     Returns a PIL Image object.
     """
-    img = Image.open(image_path).convert("L")  # grayscale
+    # Image.open() lazily loads and keeps the file handle open until closed —
+    # convert() returning a new object left the original unreferenced but not
+    # deterministically closed, risking fd exhaustion on a batch of receipts.
+    with Image.open(image_path) as _src:
+        img = _src.convert("L")  # grayscale
     # Contrast enhancement
     enhancer = ImageEnhance.Contrast(img)
     img = enhancer.enhance(2.0)

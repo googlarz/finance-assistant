@@ -135,6 +135,20 @@ def test_log_shared_expense_normalizes_fractions():
     assert abs(split["bob"] - 1/3) < 0.001
 
 
+def test_log_shared_expense_all_zero_split_raises_not_crashes():
+    """Regression: fractions summing to 0 (e.g. all-zero placeholders) hit
+    the normalization branch and divided every value by 0.0, raising an
+    uncaught ZeroDivisionError instead of a clean, catchable ValueError."""
+    from household import create_household, log_shared_expense
+
+    create_household("Test Flat", ["alice", "bob"])
+    with pytest.raises(ValueError):
+        log_shared_expense(
+            amount=50.0, category="food", paid_by="alice",
+            split={"alice": 0.0, "bob": 0.0},
+        )
+
+
 def test_log_shared_expense_multiple_expenses():
     """Multiple expenses accumulate correctly."""
     from household import create_household, log_shared_expense, get_shared_balance

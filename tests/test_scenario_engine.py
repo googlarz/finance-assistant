@@ -94,6 +94,40 @@ def test_rent_vs_buy():
     assert result["years"] == 30
 
 
+def test_debt_vs_invest_no_double_counting():
+    """Regression: net_b (invest-while-paying-minimum) subtracted BOTH the
+    remaining principal AND the cumulative interest ever charged — but the
+    remaining principal's growth already bakes in that accrued interest
+    each month, so subtracting both double-counted the cost of debt and
+    biased the comparison toward "pay debt first"."""
+    result = compare_debt_payoff_vs_invest(
+        debt_balance=1200, debt_rate=12,
+        investment_return=8, monthly_available=24, years=1,
+    )
+    invest_net = result["invest_while_paying_minimum"]["net_position"]
+    # The old (buggy, double-subtracted) formula produced -1183.62 for this
+    # exact input; the fixed formula (invest_balance - remaining debt
+    # balance, no separate interest term) produces -1047.81.
+    assert invest_net != pytest.approx(-1183.62, abs=0.01)
+    assert invest_net == pytest.approx(-1047.81, abs=0.5)
+
+
+def test_rent_vs_buy_maintenance_reduces_renter_savings():
+    """Regression: maintenance_rate (a real recurring ownership cost a
+    renter avoids) was dropped from the renter's investable-savings
+    calculation — property_tax_rate was included but maintenance_rate
+    wasn't, understating the rent scenario and biasing toward "buy"."""
+    with_maintenance = compare_rent_vs_buy(
+        monthly_rent=1500, home_price=400000, down_payment=80000,
+        mortgage_rate=4.0, years=10, maintenance_rate=0.02,
+    )
+    no_maintenance = compare_rent_vs_buy(
+        monthly_rent=1500, home_price=400000, down_payment=80000,
+        mortgage_rate=4.0, years=10, maintenance_rate=0.0,
+    )
+    assert with_maintenance["rent"]["net_position"] != no_maintenance["rent"]["net_position"]
+
+
 # ── Tax wiring (regression: scenarios silently used a crude 25%/20% flat estimate
 #    because they imported a non-existent calculate_tax and read keys no locale returns) ──
 

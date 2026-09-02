@@ -141,6 +141,15 @@ def test_xirr_same_date_cashflows_returns_error():
     assert result["xirr_pct"] is None
 
 
+def test_xirr_value_does_not_crash_on_insufficient_data():
+    """Regression: xirr_value() did result["xirr_pct"] / 100 unconditionally
+    — calling it on approximate_xirr's documented "insufficient data"
+    result (xirr_pct=None) raised TypeError instead of degrading cleanly."""
+    cashflows = [{"date": "2024-01-01", "amount": -1000}]
+    result = approximate_xirr(cashflows, current_value=1100, as_of="2024-01-01")
+    assert xirr_value(result) is None
+
+
 def test_xirr_value_helper():
     """xirr_value extracts the decimal rate from a converged result dict."""
     cashflows = [

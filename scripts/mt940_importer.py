@@ -24,8 +24,12 @@ def parse_mt940(file_path: str) -> list[dict]:
 
     for statement in statements:
         # Extract transactions (:61: lines followed by :86: details)
+        # SWIFT credit/debit mark (field 61, subfield 2a) is C, D, or the
+        # reversal/storno marks RC, RD — the [CD] literal previously matched
+        # only C/D, so any reversal row failed to match at all and was
+        # silently dropped from the imported statement with no error.
         txn_pattern = re.compile(
-            r":61:(\d{6})(\d{4})?([CD])(\D?)(\d+[,.]?\d*)"
+            r":61:(\d{6})(\d{4})?([CD]|RC|RD)(\D?)(\d+[,.]?\d*)"
             r"(.*?)(?::86:(.*?))?(?=:6[12]:|:62[FM]:|$)",
             re.DOTALL,
         )
@@ -51,7 +55,9 @@ def parse_mt940(file_path: str) -> list[dict]:
             except ValueError:
                 amount = 0.0
 
-            if credit_debit == "D":
+            # RD = reversal of a debit (nets like a credit); RC = reversal
+            # of a credit (nets like a debit).
+            if credit_debit in ("D", "RC"):
                 amount = -abs(amount)
             else:
                 amount = abs(amount)

@@ -312,14 +312,22 @@ def _simulate_net_worth(inputs: dict, n: int, rng: _RNG) -> list[dict]:
             investable_growth = investable * _clamp(port_return, -0.50, 0.50)
 
             # Property appreciation
+            prop_before = prop
             if prop > 0:
                 prop_return = rng.normal(0.03, 0.06, 1)[0]
                 prop *= (1 + _clamp(prop_return, -0.20, 0.30))
+            property_gain = prop - prop_before
 
             # Debt reduction (simplified: 5% of balance per year via repayments)
+            debt_before = debt
             debt = max(0.0, debt * 0.95)
+            debt_reduction = debt_before - debt  # shrinking a liability raises net worth
 
-            nw = nw + investable_growth + annual_savings
+            # property_gain/debt_reduction used to feed only next year's
+            # `investable` base via prop/debt, never actually crediting nw —
+            # appreciation and debt paydown were silently discarded from the
+            # running net-worth total every year.
+            nw = nw + investable_growth + annual_savings + property_gain + debt_reduction
             sim_result[yr] = round(nw, 2)
 
         results.append(sim_result)

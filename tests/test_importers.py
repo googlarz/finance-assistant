@@ -63,6 +63,30 @@ def test_mt940_currency_extracted(mt940_file):
     assert txns[0]["currency"] == "EUR"
 
 
+def test_mt940_reversal_marks_not_dropped(tmp_path):
+    """Regression: field 61's credit/debit mark can legitimately be RC/RD
+    (storno/reversal), not just C/D — the old regex only matched [CD],
+    silently dropping any reversal transaction from the imported statement
+    with no error."""
+    sample = (
+        ":20:STARTUMSE\n"
+        ":25:12345678/0000123456\n"
+        ":28C:00001/001\n"
+        ":60F:C240101EUR1000,00\n"
+        ":61:240106RD75,00NTRFNONREF\n"  # reversal of a debit -> nets positive
+        ":86:105?00STORNO\n"
+        ":61:240107RC30,00NTRFNONREF\n"  # reversal of a credit -> nets negative
+        ":86:105?00STORNO\n"
+        ":62F:C240131EUR1045,00\n"
+    )
+    p = tmp_path / "reversal.sta"
+    p.write_text(sample, encoding="utf-8")
+    txns = parse_mt940(str(p))
+    assert len(txns) == 2
+    assert txns[0]["amount"] == 75.00
+    assert txns[1]["amount"] == -30.00
+
+
 def test_mt940_garbage_file_returns_empty(tmp_path):
     p = tmp_path / "garbage.sta"
     p.write_text("this is not an mt940 file at all\n\x00\x01binary junk", encoding="utf-8")
@@ -124,6 +148,28 @@ def test_ofx_sgml_amounts_and_signs(ofx_sgml_file):
     txns = parse_ofx(ofx_sgml_file)
     assert txns[0]["amount"] == -45.99
     assert txns[1]["amount"] == 3200.00
+
+
+def test_ofx_comma_decimal_not_inflated_100x(tmp_path):
+    """Regression: OFX spec mandates '.' as the decimal separator, but some
+    non-compliant European exports use ',' instead. Stripping every comma
+    as a thousands separator silently inflated those amounts 100x —
+    "45,60" (meaning 45.60) became 4560.0."""
+    sample = _OFX_SGML.replace("<TRNAMT>-45.99", "<TRNAMT>-45,60")
+    p = tmp_path / "comma.ofx"
+    p.write_text(sample, encoding="utf-8")
+    txns = parse_ofx(str(p))
+    assert txns[0]["amount"] == -45.60
+
+
+def test_ofx_us_thousands_separator_still_works(tmp_path):
+    """US-style '1,234.56' (comma=thousands, dot=decimal) must still parse
+    correctly — the fix must not regress the common case."""
+    sample = _OFX_SGML.replace("<TRNAMT>3200.00", "<TRNAMT>1,234.56")
+    p = tmp_path / "thousands.ofx"
+    p.write_text(sample, encoding="utf-8")
+    txns = parse_ofx(str(p))
+    assert txns[1]["amount"] == 1234.56
 
 
 def test_ofx_sgml_dates_with_and_without_time(ofx_sgml_file):

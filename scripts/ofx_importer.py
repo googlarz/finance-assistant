@@ -45,9 +45,17 @@ def parse_ofx(file_path: str) -> list[dict]:
         # Parse date (YYYYMMDD or YYYYMMDDHHMMSS)
         iso_date = _parse_ofx_date(date_str)
 
-        # Parse amount
+        # Parse amount. OFX spec mandates '.' as the decimal separator, but
+        # some non-compliant European exports use ',' as the decimal point
+        # instead. Stripping every comma as a thousands separator (the old
+        # behavior) silently inflated those amounts 100x — "45,60" (meaning
+        # 45.60) became 4560.0. Only treat ',' as a thousands separator when
+        # a '.' is also present (i.e. the string already looks US-style).
         try:
-            amount = float(amount_str.replace(",", ""))
+            if "," in amount_str and "." not in amount_str:
+                amount = float(amount_str.replace(",", "."))
+            else:
+                amount = float(amount_str.replace(",", ""))
         except ValueError:
             amount = 0.0
 

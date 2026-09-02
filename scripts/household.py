@@ -127,6 +127,8 @@ def log_shared_expense(
 
     # Normalize fractions to ensure they sum to 1
     total_fraction = sum(split.values())
+    if total_fraction == 0:
+        raise ValueError("Split fractions cannot all be zero.")
     if abs(total_fraction - 1.0) > 0.01:
         split = {k: v / total_fraction for k, v in split.items()}
 

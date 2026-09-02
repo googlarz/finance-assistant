@@ -218,7 +218,13 @@ def compare_debt_payoff_vs_invest(
         invest_balance_b = invest_balance_b * (1 + monthly_invest_rate) + invest_extra
 
     net_a = invest_balance_a - total_debt_interest_a
-    net_b = invest_balance_b - debt_bal_b - total_debt_interest_b
+    # net_b was subtracting BOTH the remaining principal (debt_bal_b) and the
+    # cumulative interest ever charged (total_debt_interest_b) — but
+    # debt_bal_b's growth already bakes in that accrued interest each month
+    # (debt_bal_b += interest - min_payment), so subtracting both double-
+    # counted the cost of debt and systematically biased the comparison
+    # toward "pay debt first".
+    net_b = invest_balance_b - debt_bal_b
 
     return {
         "pay_debt_first": {
@@ -280,7 +286,12 @@ def compare_rent_vs_buy(
     for yr in range(years):
         for _ in range(12):
             total_rent += current_rent
-            monthly_savings = mortgage_payment + (home_price * property_tax_rate / 12) - current_rent
+            monthly_savings = (
+                mortgage_payment
+                + (home_price * property_tax_rate / 12)
+                + (home_price * maintenance_rate / 12)  # a renter avoids maintenance too — was omitted
+                - current_rent
+            )
             if monthly_savings > 0:
                 invest_balance = invest_balance * (1 + monthly_invest_rate) + monthly_savings
             else:

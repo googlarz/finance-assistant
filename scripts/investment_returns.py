@@ -192,9 +192,15 @@ def approximate_xirr(
     }
 
 
-def xirr_value(result: dict) -> float:
-    """Extract the XIRR float from an approximate_xirr result dict (backward compatibility)."""
-    return result["xirr_pct"] / 100
+def xirr_value(result: dict) -> Optional[float]:
+    """Extract the XIRR float from an approximate_xirr result dict (backward compatibility).
+
+    Returns None when approximate_xirr() returned its documented
+    "insufficient data" result (xirr_pct=None, converged=False) — this used
+    to crash with a TypeError on that legitimate return value.
+    """
+    xirr_pct = result.get("xirr_pct")
+    return xirr_pct / 100 if xirr_pct is not None else None
 
 
 def calculate_portfolio_returns() -> dict:

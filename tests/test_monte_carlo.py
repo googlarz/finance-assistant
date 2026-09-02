@@ -263,6 +263,30 @@ def test_n100_runs_under_1_second_debt():
     assert elapsed < 1.0, f"100 debt simulations took {elapsed:.2f}s (limit: 1s)"
 
 
+# ── Net worth: property appreciation / debt paydown must be credited ──────────
+
+def test_net_worth_credits_property_appreciation_and_debt_paydown():
+    """Regression: prop/debt were used to derive next year's `investable`
+    base but their year-over-year changes (appreciation, paydown) were
+    never added into `nw` — property gains and the benefit of a shrinking
+    liability were silently discarded from the running net-worth total
+    every year."""
+    inputs_with_assets = {
+        "current_net_worth": 100_000, "property_value": 300_000,
+        "debt_balance": 250_000, "monthly_savings": 0, "years": 5,
+    }
+    inputs_no_assets = {
+        "current_net_worth": 100_000, "property_value": 0,
+        "debt_balance": 0, "monthly_savings": 0, "years": 5,
+    }
+    with_assets = simulate("net_worth", inputs_with_assets, n_simulations=500, seed=42)
+    no_assets = simulate("net_worth", inputs_no_assets, n_simulations=500, seed=42)
+
+    # ~9k/yr appreciation + ~12.5k/yr debt paydown over 5 years is a large,
+    # unmistakable effect — the median must reflect it, not be roughly flat.
+    assert with_assets["percentiles"]["p50"] > no_assets["percentiles"]["p50"] + 20_000
+
+
 # ── Invalid input ─────────────────────────────────────────────────────────────
 
 def test_unknown_scenario_type_raises():
