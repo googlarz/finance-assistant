@@ -13,6 +13,8 @@ Checks five accountability domains:
 
 from __future__ import annotations
 
+from currency import currency_symbol as _S
+
 import sqlite3
 from datetime import date, datetime
 from typing import Optional
@@ -103,7 +105,7 @@ def check_budget_patterns(conn: sqlite3.Connection) -> list[dict]:
                     f"habit rather than a one-off."
                 ),
                 "suggestion": (
-                    f"Either raise the limit to around €{suggested:.0f} to reflect reality, "
+                    f"Either raise the limit to around {_S()}{suggested:.0f} to reflect reality, "
                     f"or let's talk about what's driving it."
                 ),
             })
@@ -220,7 +222,7 @@ def check_goal_drift(conn: sqlite3.Connection) -> list[dict]:
             "shortfall_per_month": round(shortfall, 2),
             "message": (
                 f"Your '{row['name']}' goal is falling behind — you've been putting in "
-                f"about €{actual_monthly:.0f}/month, but you need €{required_monthly:.0f}/month "
+                f"about {_S()}{actual_monthly:.0f}/month, but you need {_S()}{required_monthly:.0f}/month "
                 f"to hit it in time. That's {months_remaining} months from now."
             ),
         })
@@ -371,7 +373,7 @@ def check_category_creep(conn: sqlite3.Connection) -> list[dict]:
             "pct_increase": round(pct_increase, 1),
             "message": (
                 f"Your {cat} spending has crept up {pct_increase:.0f}% — "
-                f"averaging €{recent_avg:.0f}/month lately versus €{prior_avg:.0f}/month before. "
+                f"averaging {_S()}{recent_avg:.0f}/month lately versus {_S()}{prior_avg:.0f}/month before. "
                 f"Could be fine, but worth a look."
             ),
         })

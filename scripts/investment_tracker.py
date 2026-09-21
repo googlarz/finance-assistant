@@ -379,3 +379,64 @@ def format_portfolio_display() -> str:
         lines.append(f"  {label:<20} {data['pct']:>5.1f}%  {format_money(data['value'], 'EUR')}")
 
     return "\n".join(lines)
+
+
+# ── Trades and lots (FIFO) ────────────────────────────────────────────────────
+
+def _trades_path():
+    return get_portfolio_path().with_name("trades.json")
+
+
+def get_trades(symbol: Optional[str] = None) -> list[dict]:
+    trades = load_json(_trades_path(), default=[])
+    trades = trades if isinstance(trades, list) else []
+    return [t for t in trades if not symbol or t["symbol"] == symbol.upper()]
+
+
+def open_lots(symbol: str) -> list[dict]:
+    """FIFO open lots for `symbol`: [{date, quantity, unit_cost}] after all sells."""
+    lots: list[dict] = []
+    for t in sorted(get_trades(symbol), key=lambda t: (t["date"], t["side"] != "buy")):
+        if t["side"] == "buy":
+            fee_per_unit = t.get("fees", 0.0) / t["quantity"] if t["quantity"] else 0.0
+            lots.append({"date": t["date"], "quantity": t["quantity"],
+                         "unit_cost": t["price"] + fee_per_unit})
+        else:
+            remaining = t["quantity"]
+            while remaining > 1e-9 and lots:
+                take = min(remaining, lots[0]["quantity"])
+                lots[0]["quantity"] -= take
+                remaining -= take
+                if lots[0]["quantity"] <= 1e-9:
+                    lots.pop(0)
+    return lots
+
+
+def record_trade(trade: dict) -> dict:
+    """Append a buy/sell (deduplicated by trade["id"]) and sync the holding."""
+    trade = dict(trade, symbol=trade["symbol"].upper())
+    trades = get_trades()
+    if trade.get("id") and any(t.get("id") == trade["id"] for t in trades):
+        return trade
+    trades.append(trade)
+    save_json(_trades_path(), trades)
+    _sync_holding(trade["symbol"], trade.get("currency", "EUR"), trade.get("account_id"))
+    return trade
+
+
+def _sync_holding(symbol: str, currency: str, account_id: Optional[str]) -> None:
+    lots = open_lots(symbol)
+    units = round(sum(l["quantity"] for l in lots), 8)
+    cost = round(sum(l["quantity"] * l["unit_cost"] for l in lots), 2)
+    portfolio = _load_portfolio()
+    holding = next((h for h in portfolio["holdings"] if h.get("symbol") == symbol), None)
+    if holding is None:
+        if units > 0:
+            add_holding({"symbol": symbol, "name": symbol, "type": "stock", "units": units,
+                         "cost_basis": cost, "current_value": cost, "currency": currency,
+                         "account_id": account_id})
+        return
+    updates = {"units": units, "cost_basis": cost}
+    if not holding.get("current_value") or units == 0:
+        updates["current_value"] = cost
+    update_holding(holding["id"], updates)

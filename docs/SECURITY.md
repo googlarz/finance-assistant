@@ -6,7 +6,7 @@ has the summary.
 
 ## Design Principles
 
-1. **Local-only**: All data lives in `.finance/` on your machine. No network calls for your personal data. No telemetry. No cloud sync.
+1. **Local-only**: All data lives in `.finance/` on your machine. No telemetry. No cloud sync. The only network calls are the opt-in ones listed under [Network calls](#network-calls-opt-in) — none send transactions, balances, or names.
 2. **Structured summaries, not raw data**: Transaction amounts and categories are stored, not raw bank statements or login sessions.
 3. **You own the delete button**: Every data category can be deleted individually or all at once.
 4. **Encryption at rest**: Fernet AES-128-CBC + HMAC-SHA256 — the same authenticated encryption scheme used in production web services.
@@ -81,7 +81,7 @@ skill.py (session start)
 
 The privacy statement is shown once:
 
-> *Your data lives only in `.finance/` on your machine — nothing is ever uploaded. You can encrypt it, export it, or delete it completely at any time. I never store bank credentials, card numbers, IBANs, or government IDs.*
+> *Your data lives on your machine in `.finance/` — nothing is uploaded (a few opt-in price/rate lookups send only tickers or currency codes). You can encrypt it, export it, or delete it completely at any time. I never store bank credentials, card numbers, IBANs, or government IDs.*
 
 ## Threat Model
 
@@ -100,9 +100,27 @@ The privacy statement is shown once:
 
 By default Claude Code sends your prompts and file context to Anthropic's API — your **data on disk** never leaves your machine, but the **conversation** does. For fully local operation (confidential client data, sovereignty policies), route Claude Code through a local model. See [`sovereignty.md`](sovereignty.md) for the recipe and an accuracy harness that measures the tradeoff on your own hardware.
 
+## Network calls (opt-in)
+
+| Host | Triggered by | What is sent | What comes back |
+|------|--------------|--------------|-----------------|
+| `api.frankfurter.app` | exchange-rate sync (`currency.sync_exchange_rates`) | base currency code | daily FX rates |
+| `query1.finance.yahoo.com` | stock price sync (`price_sync`) | ticker symbols | quotes |
+| `api.coingecko.com` | crypto price sync (`price_sync`) | coin ids | quotes |
+| `bankaccountdata.gocardless.com` | bank sync (`bank_sync`, needs your GoCardless credentials) | your credentials, chosen institution | account/transaction data from your bank |
+| `cdn.jsdelivr.net` | opening a generated dashboard in a browser | (browser fetch of pinned, SRI-verified Chart.js) | JavaScript |
+
+Nothing else opens a socket. Verify: `grep -rn "urlopen\|requests\." scripts/`.
+
+## Where data lives on disk
+
+- `.finance/` — profile, accounts, transactions (JSON + `finance.db`), budgets, goals, and `originals/` (copies of statements you imported; skipped with `keep_original=False`). "Encrypt my data" covers the JSON files, `finance.db`, `originals/`, and the GoCardless token cache; decrypt before using the skill again.
+- `.finance/bank_sync/credentials.enc` — GoCardless credentials, always encrypted. `token_cache.json` holds only the short-lived (~24 h) access token.
+- `~/.finance/audit.log` — change log with amounts and descriptions. Lives in your home directory (not the project), is plaintext (chmod 600), and is deleted by `delete_all_data`.
+
 ## Known Limitations
 
 - **Memory**: Decrypted data resides in Python process memory while the skill is running. Python does not securely zero memory on deallocation. This is a fundamental Python limitation.
 - **OS keychain**: Passphrases are not stored in the OS keychain (macOS Keychain, GNOME Keyring). You must provide the passphrase each session when using encrypted files. This is deliberate — no stored secret means no stored secret to steal.
 - **Disk encryption**: If your disk is not encrypted (macOS FileVault, Linux LUKS), Fernet protects against OS-level access control bypass but not against forensic disk reads. Enable full-disk encryption for maximum protection.
-- **Audit log**: The access log itself is protected by `harden_permissions()` but is not encrypted by default (it contains timestamps and action types, not financial amounts).
+- **Audit log**: `.finance/audit/access_log.json` holds timestamps and action types only. The separate change log `~/.finance/audit.log` does contain amounts and descriptions and is not encrypted.

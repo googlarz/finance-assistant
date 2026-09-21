@@ -137,7 +137,7 @@ def generate_annual_summary(
     personal = profile.get("personal", {})
     locale = meta.get("locale", "de")
     currency = meta.get("primary_currency", "EUR")
-    account_id = profile.get("accounts", [{}])[0].get("id", "default") if profile.get("accounts") else "default"
+    account_id = "all"  # every account, converted to the primary currency
 
     income = _load_income_summary(account_id, year, profile)
     claims = _load_tax_claims(locale, year)
@@ -145,7 +145,7 @@ def generate_annual_summary(
     donation_data = _load_donation_summary(account_id, year)
 
     # Gift Aid is UK-specific
-    gift_aid = locale == "gb" or currency == "GBP"
+    gift_aid = locale == "uk" or currency == "GBP"
 
     outstanding = [
         c for c in claims

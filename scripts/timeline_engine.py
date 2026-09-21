@@ -13,6 +13,8 @@ import sqlite3
 from datetime import date, timedelta
 from typing import Optional
 
+from currency import to_currency
+
 # ── Math Helpers ──────────────────────────────────────────────────────────────
 
 def _mean(xs: list[float]) -> float:
@@ -122,16 +124,22 @@ def get_monthly_summary(conn: sqlite3.Connection, months: int = 24) -> list[dict
         """
         SELECT strftime('%Y-%m', date) AS month,
                category,
+               currency,
                SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) AS income,
                SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) AS expenses
         FROM transactions
         WHERE date >= ?
           AND type NOT IN ('transfer', 'investment', 'debt_payment')
-        GROUP BY month, category
+        GROUP BY month, category, currency
         """,
         (earliest,),
     )
     rows = cursor.fetchall()
+    try:
+        from profile_manager import get_primary_currency
+        primary = get_primary_currency()
+    except Exception:
+        primary = "EUR"
 
     # Aggregate per month
     month_data: dict[str, dict] = {}
@@ -143,11 +151,13 @@ def get_monthly_summary(conn: sqlite3.Connection, months: int = 24) -> list[dict
         if ym not in month_data:
             continue
         cat = row[1] or "uncategorized"
-        month_data[ym]["income"] += row[2] or 0.0
-        month_data[ym]["expenses"] += row[3] or 0.0
-        if row[3] and row[3] > 0:
+        inc = to_currency(row[3] or 0.0, row[2], primary)
+        exp = to_currency(row[4] or 0.0, row[2], primary)
+        month_data[ym]["income"] += inc
+        month_data[ym]["expenses"] += exp
+        if exp > 0:
             month_data[ym]["by_category"][cat] = (
-                month_data[ym]["by_category"].get(cat, 0.0) + row[3]
+                month_data[ym]["by_category"].get(cat, 0.0) + exp
             )
 
     # ── snapshots ────────────────────────────────────────────────────────────

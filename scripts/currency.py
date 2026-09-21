@@ -146,6 +146,28 @@ def convert(
     return round(amount * rate, _decimals(to_currency)), confidence
 
 
+def currency_symbol(code: Optional[str] = None) -> str:
+    """Symbol for `code`, defaulting to the profile's primary currency ("€" if unset)."""
+    if not code:
+        try:
+            from profile_manager import get_primary_currency
+            code = get_primary_currency()
+        except Exception:
+            code = "EUR"
+    code = code.upper()
+    return CURRENCY_SYMBOLS.get(code, code + " ")
+
+
+def to_currency(amount: float, from_currency: Optional[str], to_currency: str) -> float:
+    """Convert, passing the amount through unchanged when currencies match or are unknown."""
+    if not from_currency or from_currency.upper() == to_currency.upper():
+        return amount
+    try:
+        return convert(amount, from_currency, to_currency)[0]
+    except Exception:
+        return amount
+
+
 def _decimals(currency: str) -> int:
     return CURRENCY_DECIMALS.get(currency.upper(), 2)
 

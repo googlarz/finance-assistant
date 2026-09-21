@@ -7,6 +7,8 @@ ranked action items ("Do X before Dec 31 to save €Y").
 """
 from __future__ import annotations
 
+from currency import currency_symbol as _S
+
 import sqlite3
 from datetime import date, datetime
 from typing import Optional
@@ -20,6 +22,8 @@ except ImportError:  # pragma: no cover
     import os, sys
     sys.path.insert(0, os.path.dirname(__file__))
     from db import get_conn, get_db_path, init_db
+
+from currency import to_currency
 
 try:
     import tax_engine
@@ -35,6 +39,14 @@ def _current_year() -> int:
     return datetime.now().year
 
 
+def _primary_currency() -> str:
+    try:
+        from profile_manager import get_primary_currency
+        return get_primary_currency()
+    except Exception:
+        return "EUR"
+
+
 def _get_ytd_data(conn: sqlite3.Connection, year: int) -> dict:
     """
     Aggregate YTD figures from the transactions table for *year*.
@@ -44,20 +56,22 @@ def _get_ytd_data(conn: sqlite3.Connection, year: int) -> dict:
     """
     year_prefix = f"{year}-%"
 
-    row = conn.execute(
+    primary = _primary_currency()
+    ytd_income = ytd_expenses = 0.0
+    for r in conn.execute(
         """
-        SELECT
-            COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0)  AS ytd_income,
-            COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) AS ytd_expenses
+        SELECT currency,
+            COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0)  AS inc,
+            COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) AS exp
         FROM transactions
         WHERE date LIKE ?
           AND type NOT IN ('transfer', 'investment', 'debt_payment')
+        GROUP BY currency
         """,
         (year_prefix,),
-    ).fetchone()
-
-    ytd_income = float(row["ytd_income"]) if row else 0.0
-    ytd_expenses = float(row["ytd_expenses"]) if row else 0.0
+    ).fetchall():
+        ytd_income += to_currency(float(r["inc"]), r["currency"], primary)
+        ytd_expenses += to_currency(float(r["exp"]), r["currency"], primary)
 
     # Months that have at least one transaction (Jan=1 … Dec=12)
     months_row = conn.execute(
@@ -71,16 +85,19 @@ def _get_ytd_data(conn: sqlite3.Connection, year: int) -> dict:
     months_elapsed = int(months_row["cnt"]) if months_row else 0
 
     # Charitable / donation transactions
-    charitable_row = conn.execute(
-        """
-        SELECT COALESCE(SUM(ABS(amount)), 0) AS total
-        FROM transactions
-        WHERE date LIKE ?
-          AND (LOWER(category) IN ('charitable', 'donation', 'charity'))
-        """,
-        (year_prefix,),
-    ).fetchone()
-    ytd_charitable = float(charitable_row["total"]) if charitable_row else 0.0
+    ytd_charitable = sum(
+        to_currency(float(r["total"]), r["currency"], primary)
+        for r in conn.execute(
+            """
+            SELECT currency, COALESCE(SUM(ABS(amount)), 0) AS total
+            FROM transactions
+            WHERE date LIKE ?
+              AND (LOWER(category) IN ('charitable', 'donation', 'charity'))
+            GROUP BY currency
+            """,
+            (year_prefix,),
+        ).fetchall()
+    )
 
     return {
         "ytd_income": ytd_income,
@@ -253,7 +270,7 @@ def get_de_opportunities(profile: dict, ytd_data: dict, year: int) -> list[dict]
                 opportunities.append({
                     "action": (
                         f"Log additional homeoffice days — you have {remaining_days} "
-                        f"remaining days claimable at €{HO_RATE}/day"
+                        f"remaining days claimable at {_S()}{HO_RATE}/day"
                     ),
                     "category": "homeoffice",
                     "potential_tax_saving": round(extra_saving, 2),
@@ -262,7 +279,7 @@ def get_de_opportunities(profile: dict, ytd_data: dict, year: int) -> list[dict]
                     "effort": "low",
                     "detail": (
                         "§4 Abs.5 Nr.6b EStG: up to 210 homeoffice days per year at €6/day "
-                        f"(€{HO_MAX_DAYS * HO_RATE} annual cap). "
+                        f"({_S()}{HO_MAX_DAYS * HO_RATE} annual cap). "
                         "Keep a record of days worked from home."
                     ),
                     "confidence": "definitive",
@@ -275,7 +292,7 @@ def get_de_opportunities(profile: dict, ytd_data: dict, year: int) -> list[dict]
                 opportunities.append({
                     "action": (
                         f"Log remaining homeoffice days ({remaining_days} days left "
-                        f"at €{HO_RATE}/day)"
+                        f"at {_S()}{HO_RATE}/day)"
                     ),
                     "category": "homeoffice",
                     "potential_tax_saving": round(extra_saving, 2),
@@ -300,15 +317,15 @@ def get_de_opportunities(profile: dict, ytd_data: dict, year: int) -> list[dict]
             saving = gap * marginal
             if saving >= 50:
                 opportunities.append({
-                    "action": f"Increase Riester contribution to annual maximum (€{RIESTER_MAX:,})",
+                    "action": f"Increase Riester contribution to annual maximum ({_S()}{RIESTER_MAX:,})",
                     "category": "retirement",
                     "potential_tax_saving": round(saving, 2),
                     "max_deductible_amount": round(gap, 2),
                     "deadline": deadline,
                     "effort": "low",
                     "detail": (
-                        f"§10a EStG: up to €{RIESTER_MAX:,}/year deductible as Sonderausgaben. "
-                        f"Basic allowance of €{RIESTER_BASIC_ALLOWANCE} already counts toward cap. "
+                        f"§10a EStG: up to {_S()}{RIESTER_MAX:,}/year deductible as Sonderausgaben. "
+                        f"Basic allowance of {_S()}{RIESTER_BASIC_ALLOWANCE} already counts toward cap. "
                         "Contact your Riester provider to increase contributions."
                     ),
                     "confidence": "definitive",
@@ -349,7 +366,7 @@ def get_de_opportunities(profile: dict, ytd_data: dict, year: int) -> list[dict]
                 opportunities.append({
                     "action": (
                         f"Contribute to Rürup/Basis-Rente — up to "
-                        f"€{ruerup_max:,} deductible this year"
+                        f"{_S()}{ruerup_max:,} deductible this year"
                     ),
                     "category": "retirement",
                     "potential_tax_saving": round(saving, 2),
@@ -357,7 +374,7 @@ def get_de_opportunities(profile: dict, ytd_data: dict, year: int) -> list[dict]
                     "deadline": deadline,
                     "effort": "medium",
                     "detail": (
-                        f"§10 EStG: Basisrente contributions up to €{ruerup_max:,} "
+                        f"§10 EStG: Basisrente contributions up to {_S()}{ruerup_max:,} "
                         f"({'married' if married else 'single'}) are deductible. "
                         "High earners benefit most. Funds are locked until retirement."
                     ),
@@ -379,7 +396,7 @@ def get_de_opportunities(profile: dict, ytd_data: dict, year: int) -> list[dict]
         if saving >= 50:
             opportunities.append({
                 "action": (
-                    f"Make charitable donations — up to €{charitable_gap:,.0f} "
+                    f"Make charitable donations — up to {_S()}{charitable_gap:,.0f} "
                     "more deductible this year"
                 ),
                 "category": "charitable",
@@ -407,7 +424,7 @@ def get_de_opportunities(profile: dict, ytd_data: dict, year: int) -> list[dict]
             opportunities.append({
                 "action": (
                     f"Purchase work equipment before year-end to exceed the "
-                    f"€{ARBEITNEHMER_PAUSCHBETRAG:,} Arbeitnehmer-Pauschbetrag"
+                    f"{_S()}{ARBEITNEHMER_PAUSCHBETRAG:,} Arbeitnehmer-Pauschbetrag"
                 ),
                 "category": "training",
                 "potential_tax_saving": round(saving, 2),
@@ -416,7 +433,7 @@ def get_de_opportunities(profile: dict, ytd_data: dict, year: int) -> list[dict]
                 "effort": "medium",
                 "detail": (
                     "§9 EStG: work equipment (laptop, books, desk accessories) is fully "
-                    f"deductible above the €{ARBEITNEHMER_PAUSCHBETRAG:,} flat deduction. "
+                    f"deductible above the {_S()}{ARBEITNEHMER_PAUSCHBETRAG:,} flat deduction. "
                     "Keep receipts."
                 ),
                 "confidence": "likely",
@@ -486,7 +503,7 @@ def get_tax_action_summary(profile: dict, year: int = None) -> str:
 
     refund = projection.get("projected_refund_or_liability")
     refund_str = (
-        f"~€{abs(refund):,.0f} {'refund' if refund >= 0 else 'liability'}"
+        f"~{_S()}{abs(refund):,.0f} {'refund' if refund >= 0 else 'liability'}"
         if refund is not None
         else "unknown"
     )
@@ -508,10 +525,10 @@ def get_tax_action_summary(profile: dict, year: int = None) -> str:
             total_saving += saving
             conf = opp["confidence"]
             lines.append(
-                f"  {i}. {opp['action']} → save ~€{saving:,.0f} ({conf} confidence)"
+                f"  {i}. {opp['action']} → save ~{_S()}{saving:,.0f} ({conf} confidence)"
             )
         lines.append("")
-        lines.append(f"Total potential additional refund: ~€{total_saving:,.0f}")
+        lines.append(f"Total potential additional refund: ~{_S()}{total_saving:,.0f}")
 
     return "\n".join(lines)
 

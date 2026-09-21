@@ -21,7 +21,7 @@ except ImportError:
     from finance_storage import get_tax_path, get_tax_claims_path, load_json, save_json
 
 
-ALLOWED_LOCALES = {"de", "uk", "fr", "nl", "pl", "us"}
+ALLOWED_LOCALES = {"de", "uk", "fr", "nl", "pl", "us", "ie"}
 
 
 def _validate_locale_code(locale_code: str) -> str:

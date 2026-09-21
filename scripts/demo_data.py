@@ -28,6 +28,10 @@ DEMO_ACCOUNT_IDS = ("dkb-demo", "ing-savings-demo", "scalable-depot-demo")
 DEMO_GOAL_IDS = ("demo-emergency-fund", "demo-japan-trip")
 DEMO_DEBT_IDS = ("demo-credit-card",)
 DEMO_HOLDING_IDS = ("demo-world-etf",)
+# Descriptions the seed writes — lets wipe recognise rows seeded before they
+# were tagged import_source="demo" (installs from v4.0.x and earlier).
+DEMO_DESCRIPTIONS = {"Salary Alex", "Miete Berlin", "REWE Einkauf", "BVG Ticket",
+                     "Restaurant & Café", "Streaming & Cloud Abo", "Misc Ausgaben"}
 
 
 def seed_demo_data() -> bool:
@@ -108,13 +112,13 @@ def _seed_transactions(account_id: str) -> None:
         month_offset = today.replace(day=15) - timedelta(days=months_ago * 30)
         ym = month_offset.strftime("%Y-%m")
 
-        add_transaction(f"{ym}-01", "income", income, "salary", "Salary Alex", account_id)
-        add_transaction(f"{ym}-02", "expense", -rent, "housing", "Miete Berlin", account_id)
-        add_transaction(f"{ym}-05", "expense", -groceries, "groceries", "REWE Einkauf", account_id)
-        add_transaction(f"{ym}-10", "expense", -transport, "transport", "BVG Ticket", account_id)
-        add_transaction(f"{ym}-15", "expense", -restaurants, "restaurants", "Restaurant & Café", account_id)
-        add_transaction(f"{ym}-20", "expense", -subs, "subscriptions", "Streaming & Cloud Abo", account_id)
-        add_transaction(f"{ym}-25", "expense", -120, "miscellaneous", "Misc Ausgaben", account_id)
+        add_transaction(f"{ym}-01", "income", income, "salary", "Salary Alex", account_id, import_source="demo")
+        add_transaction(f"{ym}-02", "expense", -rent, "housing", "Miete Berlin", account_id, import_source="demo")
+        add_transaction(f"{ym}-05", "expense", -groceries, "groceries", "REWE Einkauf", account_id, import_source="demo")
+        add_transaction(f"{ym}-10", "expense", -transport, "transport", "BVG Ticket", account_id, import_source="demo")
+        add_transaction(f"{ym}-15", "expense", -restaurants, "restaurants", "Restaurant & Café", account_id, import_source="demo")
+        add_transaction(f"{ym}-20", "expense", -subs, "subscriptions", "Streaming & Cloud Abo", account_id, import_source="demo")
+        add_transaction(f"{ym}-25", "expense", -120, "miscellaneous", "Misc Ausgaben", account_id, import_source="demo")
 
 
 def _seed_goals(savings_account_id: str) -> None:
@@ -184,9 +188,11 @@ def wipe_demo_data() -> dict:
     removed = {"accounts": 0, "transactions": 0, "goals": 0, "debts": 0, "holdings": 0, "profile_reset": False}
 
     for account_id in DEMO_ACCOUNT_IDS:
-        if delete_account(account_id):
+        removed["transactions"] += _delete_demo_transactions(account_id)
+        # A user's real rows may live in a demo-named account (e.g. their first
+        # import after --demo): keep the account and everything they added.
+        if _real_transaction_count(account_id) == 0 and delete_account(account_id):
             removed["accounts"] += 1
-        removed["transactions"] += _delete_transactions_for_account(account_id)
 
     for goal_id in DEMO_GOAL_IDS:
         if delete_goal(goal_id):
@@ -227,27 +233,66 @@ def _reset_demo_profile() -> bool:
     return True
 
 
-def _delete_transactions_for_account(account_id: str) -> int:
-    """Delete every transaction row for account_id, across both stores and
-    every year. No generic delete_transaction()/delete_import() exists yet
-    (transaction correction tooling is separate follow-up work) — this is
-    scoped narrowly to demo cleanup: delete by account_id, not by id."""
+def _is_demo_txn(t: dict) -> bool:
+    return t.get("import_source") == "demo" or t.get("description") in DEMO_DESCRIPTIONS
+
+
+def _real_transaction_count(account_id: str) -> int:
     from finance_storage import ensure_subdir
+    try:
+        from db import get_conn
+        with get_conn() as conn:
+            rows = conn.execute(
+                "SELECT source, description FROM transactions WHERE account_id = ?", (account_id,)
+            ).fetchall()
+        return sum(1 for r in rows if not _is_demo_txn({"import_source": r[0], "description": r[1]}))
+    except Exception:
+        pass
+    n = 0
+    for f in ensure_subdir("accounts", "transactions").glob(f"{account_id}_*.json"):
+        n += sum(1 for t in (_load_json_list(f)) if not _is_demo_txn(t))
+    return n
+
+
+def _load_json_list(path) -> list:
+    from finance_storage import load_json
+    data = load_json(path, default={})
+    return data.get("transactions", []) if isinstance(data, dict) else []
+
+
+def _delete_demo_transactions(account_id: str) -> int:
+    """Delete only demo-seeded transaction rows for account_id, across both
+    stores and every year — never rows the user added or imported."""
+    from finance_storage import ensure_subdir, load_json, save_json
 
     count = 0
     try:
         from db import get_conn
         with get_conn() as conn:
-            cur = conn.execute("DELETE FROM transactions WHERE account_id = ?", (account_id,))
-            count = cur.rowcount or 0
+            rows = conn.execute(
+                "SELECT id, source, description FROM transactions WHERE account_id = ?", (account_id,)
+            ).fetchall()
+            ids = [r[0] for r in rows if _is_demo_txn({"import_source": r[1], "description": r[2]})]
+            for tid in ids:
+                conn.execute("DELETE FROM transactions WHERE id = ?", (tid,))
+            count = len(ids)
     except Exception:
         pass
 
-    txn_dir = ensure_subdir("accounts", "transactions")
-    for f in txn_dir.glob(f"{account_id}_*.json"):
-        try:
-            f.unlink()
-        except OSError:
-            pass
+    json_removed = 0
+    for f in ensure_subdir("accounts", "transactions").glob(f"{account_id}_*.json"):
+        rows = _load_json_list(f)
+        keep = [t for t in rows if not _is_demo_txn(t)]
+        json_removed += len(rows) - len(keep)
+        if not keep:
+            try:
+                f.unlink()
+            except OSError:
+                pass
+        elif len(keep) != len(rows):
+            data = load_json(f, default={})
+            data["transactions"] = keep
+            data["transaction_count"] = len(keep)
+            save_json(f, data)
 
-    return count
+    return count or json_removed

@@ -198,7 +198,7 @@ def get_ambient_snapshot(profile: dict) -> str:
     # Net worth
     try:
         from net_worth_engine import calculate_net_worth
-        nw = calculate_net_worth(profile) or {}
+        nw = calculate_net_worth() or {}
         nw_val = nw.get("net_worth", 0)
         if nw_val:
             parts.append(f"Net worth: €{nw_val:,.0f}")

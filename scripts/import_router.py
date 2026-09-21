@@ -126,8 +126,8 @@ def import_file(
     """Import transactions from a file. Returns preview or import result.
 
     Args:
-        keep_original: Copy the source file to ~/.finance/originals/ before
-            parsing (default True). The copy is timestamped so repeated imports
+        keep_original: Copy the source file to ~/.finance/originals/ when
+            committing (default True; dry runs never copy). The copy is timestamped so repeated imports
             of the same file never overwrite each other. Set to False to skip.
         route_by_account: For multi-account-capable formats (Mint/Monarch/YNAB),
             resolve each row's own account name against existing accounts and
@@ -149,13 +149,19 @@ def import_file(
         return {"error": f"Cannot access file: {exc}", "file": file_path}
 
     # Preserve the original before any parsing so we always have the raw source
-    original_saved = _preserve_original(file_path) if keep_original else ""
+    original_saved = _preserve_original(file_path) if keep_original and not dry_run else ""
 
     fmt = format_hint or detect_format(file_path)
     # For CSV, normalize_transactions() needs the SPECIFIC bank format (e.g.
     # "monarch"), not the generic container format ("csv") — Tier 1 transfer
     # detection (#8) looks up TRANSFER_CATEGORIES by this exact name.
     parser_format = fmt
+
+    if fmt == "csv":
+        from broker_importer import looks_like_broker, import_broker_csv
+        if looks_like_broker(file_path):  # trade history, not a bank statement
+            return import_broker_csv(file_path, account_id=account_id, currency=currency,
+                                     dry_run=dry_run)
 
     multi_account_warning = None
     rows_skipped = None
@@ -364,6 +370,11 @@ def import_file(
         result["imported"] = imported
         result["import_ref"] = import_ref
         result["dry_run"] = False
+        try:
+            from budget_engine import refresh_budgets
+            refresh_budgets(t["date"] for t in unique)
+        except Exception:
+            pass
 
         # Log import
         log = load_json(get_import_log_path(), default={"imports": []})

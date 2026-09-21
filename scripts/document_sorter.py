@@ -387,6 +387,16 @@ def build_new_name(
 
 # ── Main sort function ─────────────────────────────────────────────────────────
 
+def _unique_path(path: Path, taken: set) -> Path:
+    """Never overwrite: suffix ' (2)', ' (3)'... when the name exists or is already planned."""
+    candidate, n = path, 2
+    while candidate.exists() or candidate in taken:
+        candidate = path.with_name(f"{path.stem} ({n}){path.suffix}")
+        n += 1
+    taken.add(candidate)
+    return candidate
+
+
 def sort_folder(
     folder_path: str,
     dry_run: bool = False,
@@ -408,6 +418,7 @@ def sort_folder(
     if not files:
         return {"error": "No supported files found in folder.", "files": []}
 
+    taken: set = set()
     manifest = {
         "folder": str(folder),
         "total_files": len(files),
@@ -430,7 +441,8 @@ def sort_folder(
 
             subfolder = DOCUMENT_CATEGORIES[cat]["subfolder"]
             dest_dir = folder / subfolder
-            dest_path = dest_dir / new_name
+            dest_path = _unique_path(dest_dir / new_name, taken)
+            new_name = dest_path.name
 
             entry = {
                 "original": f.name,

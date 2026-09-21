@@ -20,10 +20,12 @@ _HEAD = """<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script
-  src="https://cdn.jsdelivr.net/npm/chart.js"
+  src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"
+  integrity="sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt" crossorigin="anonymous"
   onerror="document.body.innerHTML='<div style=\'padding:20px;color:#e0e0e0;background:#1a1a2e;font-family:sans-serif\'><h3>&#9888; Chart could not load</h3><p>Chart.js CDN is unavailable (offline or restricted network).</p><p>The data is shown below in text form:</p><pre id=\'fallback-data\'></pre></div>'; var fd=document.getElementById('fallback-data'); if(fd) fd.textContent=window.__chartData||'No data'">
 </script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.1.0/dist/chartjs-plugin-annotation.min.js"
+  integrity="sha384-3N9GHhCtN3CQef6tNfqgZlv7sQLYIkcChN+uaTZ7xVdzKYp/SjBNPxa92+hM7EAY" crossorigin="anonymous"></script>
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; padding: 16px; background: #0f0f1a; color: #e0e0e0;

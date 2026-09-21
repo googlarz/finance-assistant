@@ -171,7 +171,7 @@ Have a conversation, not a form. Ask one small batch at a time, explain why you'
 
 If they say yes, run `python3 skill.py --demo`. Otherwise begin onboarding.
 
-**Before starting real onboarding, if demo data exists, wipe it first.** Check with `python3 skill.py --demo` (it reports "already present" vs "seeded") or just run `python3 skill.py --wipe-demo` unconditionally before the first real question — it's a safe no-op if no demo data exists. This is what makes the "wiped the moment you start real setup" promise above actually true; skipping it leaves the demo's "Alex" profile and sample accounts mixed in with the user's real data.
+**Before starting real onboarding, if demo data exists, wipe it first.** Just run `python3 skill.py --wipe-demo` before the first real question — it's a safe no-op if no demo data exists, and it only removes sample rows (anything the user imported or added stays). Never run `--demo` to "check" for demo data: that seeds it. This is what makes the "wiped the moment you start real setup" promise above actually true; skipping it leaves the demo's "Alex" profile and sample accounts mixed in with the user's real data.
 
 Collect naturally in small batches:
 - Where they are and what currency they use
@@ -182,7 +182,7 @@ Collect naturally in small batches:
 
 State the privacy line once, briefly:
 
-> "I keep a private profile with just the essentials — no raw documents, no account numbers. You can delete everything with one command any time."
+> "I keep a private profile with just the essentials — no account numbers. You can delete everything with one command any time."
 
 If the user is privacy-motivated (raises it, or asks where data goes), be precise about the two layers — don't let them assume more than is true:
 
@@ -626,7 +626,7 @@ Setup flow:
 
 State the privacy line in the first session:
 
-`Your data lives only in .finance/ on your machine — nothing is ever uploaded. You can encrypt it, export it, or delete it completely at any time. I never store bank credentials, card numbers, IBANs, or government IDs.`
+`Your data lives on your machine in .finance/ — nothing is uploaded (a few opt-in price/rate lookups send only tickers or currency codes). You can encrypt it, export it, or delete it completely at any time. I never store bank credentials, card numbers, IBANs, or government IDs.`
 
 ### Additional Tools
 
@@ -634,7 +634,9 @@ State the privacy line in the first session:
 |------|-----|
 | session alerts | `scripts/session_alerts.py` — budget warnings, upcoming bills, tax deadlines, FIRE progress |
 | recurring transactions | `scripts/recurring_engine.py` — auto-generate rent, salary, subscriptions |
-| category corrections | `scripts/category_learner.py` — remember user corrections to auto-categorize |
+| category corrections | `scripts/category_learner.py` — when the user says a category is wrong, call `learn_correction(description, payee, old, new)` and `update_transaction_fields`; future rows with that description/payee are categorized automatically |
+| balance reconciliation | `scripts/reconciliation.py` — when the user states an account balance on a date ("my DKB balance on 1 Sep was 1,234.56"), call `assert_balance(account_id, balance, on)`; `check_all()` reports money the ledger can't explain (also shown at session start) |
+| session hygiene | `scripts/session_hygiene.py` — runs automatically at session start: books due recurrings, takes snapshots, refreshes budget actuals, surfaces reconciliation gaps |
 | investment returns | `scripts/investment_returns.py` — TWR, XIRR, per-holding returns |
 | auto-snapshots | `scripts/snapshot_scheduler.py` — monthly net worth and portfolio snapshots |
 | report generation | `scripts/report_renderer.py` — markdown and HTML reports |

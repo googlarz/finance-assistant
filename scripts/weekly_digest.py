@@ -13,7 +13,10 @@ Sends: macOS OS notification with a one-line summary
 
 from __future__ import annotations
 
+from currency import currency_symbol as _S
+
 import json
+from typing import Optional
 import os
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -174,7 +177,7 @@ def _portfolio_summary(profile: dict) -> list[str]:
                 for h in holdings
             )
             pct = min(total / fire_target * 100, 100)
-            lines.append(f"FIRE: {pct:.1f}% (€{total:,.0f} / €{fire_target:,.0f})")
+            lines.append(f"FIRE: {pct:.1f}% ({_S()}{total:,.0f} / {_S()}{fire_target:,.0f})")
     except Exception:
         pass
 
@@ -199,10 +202,10 @@ def _inbox_summary() -> list[str]:
 def _net_worth_summary(profile: dict) -> list[str]:
     try:
         from net_worth_engine import calculate_net_worth
-        nw = calculate_net_worth(profile) or {}
+        nw = calculate_net_worth() or {}
         nw_val = nw.get("net_worth", 0)
         if nw_val:
-            return [f"Net worth: €{nw_val:,.0f}"]
+            return [f"Net worth: {_S()}{nw_val:,.0f}"]
     except Exception:
         pass
     return []
@@ -277,8 +280,24 @@ def _send_notification(title: str, body: str) -> None:
         pass
 
 
+def _log_path() -> Path:
+    return Path.home() / ".finance" / "digest_log.jsonl"
+
+
+def days_since_last_digest() -> Optional[int]:
+    """Days since the last logged digest, or None if there never was one."""
+    try:
+        last = None
+        with open(_log_path(), encoding="utf-8") as f:
+            for line in f:
+                last = line
+        return (datetime.now() - datetime.fromisoformat(json.loads(last)["ts"])).days
+    except Exception:
+        return None
+
+
 def _write_log(digest: dict) -> None:
-    log_path = Path.home() / ".finance" / "digest_log.jsonl"
+    log_path = _log_path()
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with open(log_path, "a", encoding="utf-8") as f:

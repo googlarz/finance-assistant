@@ -17,7 +17,7 @@ from onboarding import (
     get_resume_message, get_completion_message, get_onboarding_state,
 )
 
-__version__ = "4.0.1"
+__version__ = "4.1.0"
 
 _timeline_ctx: dict = {}
 
@@ -26,10 +26,13 @@ def _setup_db() -> None:
     """Bootstrap SQLite DB and run migration on first run."""
     global _timeline_ctx
     try:
-        from db import init_db, is_initialized
+        from db import init_db, is_initialized, is_encrypted
         from db_migrate import migrate_all
         from finance_storage import get_finance_dir
 
+        if is_encrypted():
+            print("[Finance Assistant] Data is encrypted — say 'decrypt my data' first.", file=sys.stderr)
+            return
         if not is_initialized():
             init_db()
             finance_dir = get_finance_dir()
@@ -150,6 +153,13 @@ def _main_body() -> str:
         return get_completion_message(profile)
 
     profile_display = display_profile(compact=True)
+    try:  # keep the ledger current: recurrings, snapshots, budget actuals, reconciliation
+        from session_hygiene import run as _run_hygiene
+        _notes = _run_hygiene()
+        if _notes:
+            profile_display += "\n\n" + "\n".join(f"• {n}" for n in _notes)
+    except Exception:
+        pass
 
     # Suppression footer — appended to whatever we return, so the user always
     # learns why the session is quiet (set after get_session_alerts runs).
@@ -200,6 +210,8 @@ def _setup_watcher() -> None:
     import pathlib
     import subprocess
 
+    from finance_storage import get_project_dir
+    project_dir = get_project_dir()  # launchd runs with cwd=/, so pin the data dir
     skill_path = pathlib.Path(__file__).resolve()
     inbox_dir = pathlib.Path.home() / ".finance" / "inbox"
     inbox_dir.mkdir(parents=True, exist_ok=True)
@@ -224,6 +236,13 @@ def _setup_watcher() -> None:
     <array>
         <string>{inbox_dir}</string>
     </array>
+    <key>WorkingDirectory</key>
+    <string>{project_dir}</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>FINANCE_PROJECT_DIR</key>
+        <string>{project_dir}</string>
+    </dict>
     <key>StandardOutPath</key>
     <string>{pathlib.Path.home()}/.finance/inbox-watcher.log</string>
     <key>StandardErrorPath</key>
@@ -289,6 +308,8 @@ def _setup_digest(weekday: int = 0, hour: int = 9, minute: int = 0) -> None:
     weekday_names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
     day_label = weekday_names[weekday]
 
+    from finance_storage import get_project_dir
+    project_dir = get_project_dir()  # launchd runs with cwd=/, so pin the data dir
     skill_path = pathlib.Path(__file__).resolve()
     label = "com.financeassistant.weekly-digest"
     plist_path = pathlib.Path.home() / "Library" / "LaunchAgents" / f"{label}.plist"
@@ -314,6 +335,13 @@ def _setup_digest(weekday: int = 0, hour: int = 9, minute: int = 0) -> None:
         <integer>{hour}</integer>
         <key>Minute</key>
         <integer>{minute}</integer>
+    </dict>
+    <key>WorkingDirectory</key>
+    <string>{project_dir}</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>FINANCE_PROJECT_DIR</key>
+        <string>{project_dir}</string>
     </dict>
     <key>StandardOutPath</key>
     <string>{pathlib.Path.home()}/.finance/digest.log</string>

@@ -170,6 +170,13 @@ _CATEGORY_PATTERNS: list[tuple[str, re.Pattern]] = [
 def auto_categorize(description: str, amount: float) -> tuple[str, Optional[str]]:
     """Guess category from description keywords. Returns (category, None)."""
     desc = description or ""
+    try:  # user corrections (category_learner) beat the built-in keyword guesses
+        from category_learner import suggest_category
+        learned = suggest_category(desc)
+        if learned:
+            return learned, None
+    except Exception:
+        pass
     for category, pattern in _CATEGORY_PATTERNS:
         if pattern.search(desc):
             return category, None
@@ -331,20 +338,48 @@ def add_transaction(
     except Exception:
         pass
 
+    if (txn.get("import_source") or "manual") == "manual":  # bulk imports refresh once, in import_router
+        try:
+            from budget_engine import refresh_budgets
+            refresh_budgets([txn["date"]])
+        except Exception:
+            pass
+
     return {
         "transaction_added": txn,
         "display": _format_transaction_added(txn),
     }
 
 
+ALL_ACCOUNTS = "all"
+
+
+def _all_account_ids() -> list[str]:
+    ids = ["default"]
+    try:
+        from account_manager import list_accounts
+        ids += [a["id"] for a in list_accounts() if a.get("id")]
+    except Exception:
+        pass
+    return list(dict.fromkeys(ids))
+
+
 def get_transactions(
-    account_id: str = "default",
+    account_id: Optional[str] = "default",
     year: Optional[int] = None,
     month: Optional[int] = None,
     category: Optional[str] = None,
     type: Optional[str] = None,
 ) -> list[dict]:
-    """Retrieve filtered transactions. Reads from SQLite if available, else JSON."""
+    """Retrieve filtered transactions. Reads from SQLite if available, else JSON.
+
+    account_id=None or "all" returns transactions from every account.
+    """
+    if account_id in (None, ALL_ACCOUNTS):
+        out: list[dict] = []
+        for aid in _all_account_ids():
+            out.extend(get_transactions(aid, year, month, category, type))
+        return sorted(out, key=lambda t: t.get("date", ""))
     year = year or datetime.now().year
 
     if _db_available():
@@ -398,7 +433,7 @@ def _account_currency(account_id: str) -> str:
 
 
 def get_totals(
-    account_id: str = "default",
+    account_id: Optional[str] = "default",
     year: Optional[int] = None,
     month: Optional[int] = None,
     group_by: str = "category",
@@ -411,7 +446,14 @@ def get_totals(
     account had its dollar amounts counted as euros with no conversion.
     """
     txns = get_transactions(account_id=account_id, year=year, month=month)
-    target_currency = _account_currency(account_id)
+    if account_id in (None, ALL_ACCOUNTS):
+        try:
+            from profile_manager import get_primary_currency
+            target_currency = get_primary_currency()
+        except Exception:
+            target_currency = "EUR"
+    else:
+        target_currency = _account_currency(account_id)
     totals: dict = {}
     for t in txns:
         key = t.get(group_by, "other")

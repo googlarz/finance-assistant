@@ -1,5 +1,38 @@
 # Changelog
 
+## v4.1.0 — 2026-09-21
+
+Focus: the first sixty seconds, trust, and a ledger that maintains itself.
+
+### Fixed
+- **Onboarding produced locale codes the tax engine rejected.** UK users got `gb`, so every tax call raised `Unknown locale 'gb'`; Ireland was unreachable and got German rules by default. The wizard now emits `uk` and `ie`, legacy `gb` profiles are read as `uk`, and a test asserts every locale directory is reachable from onboarding. Austria/Switzerland (no plugin) are no longer offered by the wizard.
+- **The wizard wrote nothing to the engines.** Accounts, goals, debts, holdings and the budget only went to `profile.meta.onboarding_*`; after setup net worth was 0 and the session-start overdraft alert fired falsely. Answers now create real accounts/goals/debts/holdings/budget (idempotent by name).
+- **Budget actuals were never refreshed** (`update_budget_actuals` had no caller). They now refresh on manual add, once per import, and at session start.
+- **MCP `import_preview` could read any file** (unparseable text was echoed back as `raw_text`) and copied it into `.finance/originals/` despite "read-only". Paths are limited to the project dir / `FINANCE_IMPORT_DIR`, raw text is stripped, and dry runs never copy originals. MCP dependency pin corrected to `mcp>=2.0.0`.
+- **`--wipe-demo` could delete real rows** in a demo-named account (e.g. your first import after `--demo`). It now removes only demo-seeded rows and keeps an account that holds anything else. SKILL.md no longer tells Claude to "check" for demo data by seeding it.
+- **Analytics covered one of N accounts and summed currencies raw.** `annual_summary` reads all accounts; `tax_optimizer` and `timeline_engine` convert per currency; totals accept `account_id="all"` (now the default for budget refresh, subscriptions, MCP totals).
+- **Weekly digest, session alerts and financial monitor never showed net worth** (called `calculate_net_worth(profile)`, which takes no argument; the error was swallowed).
+- **`pip install .` failed** (nonexistent build backend); the dead `finance-assistant` console script is removed.
+- **`document_sorter` overwrote same-named files**; collisions now get ` (2)`, ` (3)` suffixes.
+- **launchd jobs ran in the wrong directory**: plists now pin `WorkingDirectory` and `FINANCE_PROJECT_DIR`.
+- **Transfer matching was O(n²) with a rate-file read per cross-currency comparison** (minutes on a 2,700-row export); now date-indexed with one rate lookup per currency pair.
+- Alerts, digest, what-if and tax-optimizer text used a hardcoded `€`; they now use the profile's currency symbol.
+
+### Security & trust
+- "Encrypt my data" now covers `finance.db` (WAL checkpointed, sidecars removed), `originals/`, and the GoCardless token cache; decrypt restores them. The skill refuses to touch an encrypted DB.
+- Backups reject weak passphrases (same rule as file encryption).
+- `delete_all_data` also removes `~/.finance/audit.log`.
+- SECURITY.md, README, ARCHITECTURE.md and the privacy summary now name every network call (Frankfurter, Yahoo, CoinGecko, GoCardless, jsDelivr) and where data lives; Chart.js is pinned with SRI hashes.
+
+### Added
+- **Session-start hygiene**: books due recurring transactions (skipping ones already imported from the bank), takes snapshots, refreshes budgets, surfaces reconciliation gaps, and — off macOS — delivers the weekly digest when it's >7 days old.
+- **Balance-assertion reconciliation** (`scripts/reconciliation.py`): state a balance on a date; the ledger reports money it can't explain between assertions.
+- Learned category corrections are now applied to new transactions.
+- **Brokerage trade import** (buy/sell CSVs → FIFO lots → holdings) and **realized capital gains** with a simplified tax estimate for DE, UK and IE (`scripts/capital_gains.py`). The rule sets are 2025-era simplifications not verified against official sources — a planning aid, not a filing figure.
+- **Write-capable MCP tools** (`commit_import` with mandatory preview count, `add_account`, `add_transaction`, `assert_balance`, `onboard_step`) plus `get_capital_gains` and `check_reconciliation`, and a Claude Desktop config example.
+
+Full suite: 1,565 passed (was 1,534), each fix revert-verified.
+
 ## v4.0.1 — 2026-08-21
 
 ### Fixed — 13 bugs found in a targeted audit (money-correctness, crashes, silent data loss)

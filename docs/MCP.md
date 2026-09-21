@@ -6,28 +6,51 @@ see your numbers without a terminal — the structural gap the no-terminal
 claude.ai/Cowork paths otherwise hit (no CSV import, no local database, no
 bank sync at all).
 
-## Why read-only
+## Read vs. write
 
-This is a v1 scope decision, not a technical limit: every tool either
-reads data or previews an import without committing it (`import_preview`
-always runs a dry-run). Nothing here writes to `.finance/`. Committing an
-import or any other mutation stays a skill/CLI-only action.
+Read tools never write. The few write tools follow the skill's
+dry-run-first contract: `commit_import` refuses unless you pass the exact
+`to_import` count that `import_preview` just reported, so an import can't
+be committed blind. `import_preview` and `commit_import` only read files
+inside the project directory (or `FINANCE_IMPORT_DIR`), never return raw
+file contents, and preview never copies the file into `.finance/originals/`.
 
 ## Requirements
 
-- Python 3.10+ (the project's baseline as of this release)
-- `pip install "finance-assistant[mcp]"` (or `pip install mcp>=1.0.0`
+- Python 3.10+
+- `pip install "finance-assistant[mcp]"` (or `pip install "mcp>=2.0.0"`
   alongside the base install)
+
+## Claude Desktop config
+
+```json
+{
+  "mcpServers": {
+    "finance-assistant": {
+      "command": "python3",
+      "args": ["/path/to/finance-assistant/scripts/mcp_server.py"],
+      "env": {"FINANCE_PROJECT_DIR": "/path/to/your/project"}
+    }
+  }
+}
+```
 
 ## Tools
 
-| Tool | Wraps |
-|------|-------|
-| `import_preview(file_path, account_id="default", currency="EUR")` | `import_router.import_file(..., dry_run=True)` |
-| `get_totals(account_id="default", year=None, month=None)` | `transaction_logger.get_totals()` |
-| `get_budget_variance(year, month=None)` | `budget_engine.get_budget_variance()` |
-| `get_net_worth()` | `net_worth_engine.calculate_net_worth()` |
-| `get_tax_summary(year=None)` | `tax_engine.get_tax_summary()` |
+| Tool | Kind | Wraps |
+|------|------|-------|
+| `import_preview(file_path, account_id="default", currency="EUR")` | read | `import_router.import_file(..., dry_run=True)` |
+| `get_totals(account_id="all", year=None, month=None)` | read | `transaction_logger.get_totals()` (all accounts, primary currency, by default) |
+| `get_budget_variance(year, month=None)` | read | `budget_engine.get_budget_variance()` |
+| `get_net_worth()` | read | `net_worth_engine.calculate_net_worth()` |
+| `get_tax_summary(year=None)` | read | `tax_engine.get_tax_summary()` |
+| `get_capital_gains(year, locale=None)` | read | `capital_gains.estimate_tax()` |
+| `check_reconciliation()` | read | `reconciliation.check_all()` |
+| `commit_import(file_path, expected_to_import, account_id, currency)` | write | `import_router.import_file(..., dry_run=False)` |
+| `add_account(name, type, currency, current_balance)` | write | `account_manager.add_account()` |
+| `add_transaction(date, amount, description, account_id, category, currency)` | write | `transaction_logger.add_transaction()` |
+| `assert_balance(account_id, balance, on)` | write | `reconciliation.assert_balance()` |
+| `onboard_step(step, answer)` | write | `onboarding.parse_step_response()` + `complete_step()` |
 
 ## Which `.finance/` directory
 

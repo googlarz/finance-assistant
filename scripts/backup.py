@@ -55,6 +55,8 @@ def _read_passphrase(confirm: bool) -> str:
     if not p1:
         raise ValueError("Passphrase cannot be empty.")
     if confirm:
+        from data_safety import _check_passphrase_strength
+        _check_passphrase_strength(p1)  # creating a backup: reject weak passphrases
         p2 = getpass.getpass("Confirm passphrase: ")
         if p1 != p2:
             raise ValueError("Passphrases do not match.")

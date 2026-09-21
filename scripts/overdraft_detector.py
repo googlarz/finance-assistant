@@ -9,6 +9,8 @@ plus committed recurring items from SQLite to detect overdraft risk.
 
 from __future__ import annotations
 
+from currency import currency_symbol as _S
+
 import calendar
 import os
 from collections import defaultdict
@@ -192,7 +194,7 @@ def detect_overdraft_risk(
 
         month_str = d.strftime("%b %-d")
         if triggered_by:
-            trigger_part = f" {triggered_by.split(' (')[0]} of €{abs(largest_out):,.0f} due {month_str}."
+            trigger_part = f" {triggered_by.split(' (')[0]} of {_S()}{abs(largest_out):,.0f} due {month_str}."
         else:
             trigger_part = ""
 
@@ -200,12 +202,12 @@ def detect_overdraft_risk(
         if bal < 0:
             message = (
                 f"Heads up — your balance could go negative on {month_str} ({timing}), "
-                f"hitting around €{bal:,.0f}.{trigger_part}"
+                f"hitting around {_S()}{bal:,.0f}.{trigger_part}"
             )
         else:
             message = (
                 f"Your balance looks tight around {month_str} ({timing}) — "
-                f"projected at €{bal:,.0f}.{trigger_part}"
+                f"projected at {_S()}{bal:,.0f}.{trigger_part}"
             )
 
         risks.append({
@@ -318,7 +320,7 @@ def get_cashflow_alerts(conn=None) -> list[dict]:
                 "title": "Low balance projected",
                 "detail": (
                     f"Balance may drop below €500 around {low_snap['date']} "
-                    f"(projected: €{low_snap['balance']:,.0f})."
+                    f"(projected: {_S()}{low_snap['balance']:,.0f})."
                 ),
                 "action": "Consider setting aside a buffer.",
             })
@@ -474,10 +476,10 @@ def _build_narrative(
     delta = abs(end_balance - balance)
     parts = [
         f"Over the next {days} days, your balance is projected to {direction} "
-        f"by €{delta:,.0f} (from €{balance:,.0f} to €{end_balance:,.0f})."
+        f"by {_S()}{delta:,.0f} (from {_S()}{balance:,.0f} to {_S()}{end_balance:,.0f})."
     ]
     parts.append(
-        f"Expected inflows total €{total_in:,.0f} and outflows total €{abs(total_out):,.0f}."
+        f"Expected inflows total {_S()}{total_in:,.0f} and outflows total {_S()}{abs(total_out):,.0f}."
     )
     if risks:
         earliest = min(risks, key=lambda r: r["days_from_now"])

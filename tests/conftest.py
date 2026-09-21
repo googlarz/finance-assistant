@@ -35,6 +35,11 @@ def isolated_finance_dir(tmp_path, monkeypatch):
         monkeypatch.setattr(audit_log, "_AUDIT_PATH", tmp_path / ".finance" / "audit.log")
     except ImportError:
         pass
+    try:  # digest history is HOME-anchored too
+        import weekly_digest
+        monkeypatch.setattr(weekly_digest, "_log_path", lambda: tmp_path / ".finance" / "digest_log.jsonl")
+    except ImportError:
+        pass
     yield tmp_path
 
 

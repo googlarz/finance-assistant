@@ -220,9 +220,9 @@ def get_variance(month: str) -> list[dict]:
 def update_budget_actuals(
     year: int,
     month: Optional[int] = None,
-    account_id: str = "default",
+    account_id: str = "all",
 ) -> dict:
-    """Refresh actuals from transaction log. Returns updated budget."""
+    """Refresh actuals from transaction log (all accounts by default). Returns updated budget."""
     budget = get_budget(year, month)
     if not budget:
         return {"error": f"No budget found for {year}" + (f"-{month:02d}" if month else "")}
@@ -249,6 +249,18 @@ def update_budget_actuals(
 
     save_json(get_budget_path(year, month), budget)
     return budget
+
+
+def refresh_budgets(dates) -> None:
+    """Refresh actuals for every budget covering the given YYYY-MM-DD dates."""
+    for ym in {str(d)[:7] for d in dates if d}:
+        try:
+            y, m = int(ym[:4]), int(ym[5:7])
+        except ValueError:
+            continue
+        for month in (m, None):
+            if get_budget(y, month):
+                update_budget_actuals(y, month)
 
 
 def get_budget_variance(year: int, month: Optional[int] = None) -> dict:
@@ -305,7 +317,7 @@ def get_budget_variance(year: int, month: Optional[int] = None) -> dict:
 
 
 def suggest_budget_from_history(
-    account_id: str = "default",
+    account_id: str = "all",
     year: Optional[int] = None,
     months_back: int = 3,
 ) -> dict:

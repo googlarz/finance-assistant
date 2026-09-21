@@ -223,6 +223,11 @@ def delete_all_data(confirm: bool = False) -> dict:
         }
 
     finance_dir = get_finance_dir()
+    try:  # ~/.finance/audit.log lives outside .finance/ but holds amounts + descriptions
+        import audit_log
+        Path(audit_log._AUDIT_PATH).unlink(missing_ok=True)
+    except Exception:
+        pass
     if finance_dir.exists():
         shutil.rmtree(finance_dir)
         return {
@@ -487,6 +492,67 @@ def decrypt_file(file_path: str, passphrase: str) -> str:
     return str(path)
 
 
+_BLOB_MAGIC = b"FAENC1\n"
+
+
+def is_blob_encrypted(path: Path) -> bool:
+    try:
+        with open(path, "rb") as f:
+            return f.read(len(_BLOB_MAGIC)) == _BLOB_MAGIC
+    except OSError:
+        return False
+
+
+def encrypt_blob(file_path: str, passphrase: str) -> str:
+    """Encrypt any file (SQLite DB, scanned statement, ...) in place:
+    MAGIC + 16-byte salt + Fernet token. Same KDF as encrypt_file."""
+    if not _CRYPTO_AVAILABLE:
+        raise RuntimeError("Encryption requires the 'cryptography' package.")
+    path = Path(file_path)
+    if is_blob_encrypted(path):
+        return str(path)
+    _check_passphrase_strength(passphrase)
+    salt = _os.urandom(16)
+    token = Fernet(_derive_fernet_key(passphrase, salt)).encrypt(path.read_bytes())
+    tmp = path.with_name(path.name + ".enc.tmp")
+    try:
+        tmp.write_bytes(_BLOB_MAGIC + salt + token)
+        tmp.replace(path)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+    path.chmod(0o600)
+    return str(path)
+
+
+def decrypt_blob(file_path: str, passphrase: str) -> str:
+    path = Path(file_path)
+    if not is_blob_encrypted(path):
+        return str(path)
+    raw = path.read_bytes()[len(_BLOB_MAGIC):]
+    try:
+        plain = Fernet(_derive_fernet_key(passphrase, raw[:16])).decrypt(raw[16:])
+    except InvalidToken:
+        raise ValueError("Wrong passphrase or corrupted file.")
+    tmp = path.with_name(path.name + ".dec.tmp")
+    try:
+        tmp.write_bytes(plain)
+        tmp.replace(path)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+    return str(path)
+
+
+def _blob_targets(finance_dir: Path) -> list[Path]:
+    """Non-JSON stores: the SQLite database and preserved original statements."""
+    targets = [finance_dir / "finance.db"]
+    originals = finance_dir / "originals"
+    if originals.is_dir():
+        targets += [p for p in originals.rglob("*") if p.is_file()]
+    return [p for p in targets if p.is_file()]
+
+
 def encrypt_sensitive_files(passphrase: str) -> dict:
     """
     Encrypt sensitive financial data files using Fernet AES encryption.
@@ -512,6 +578,7 @@ def encrypt_sensitive_files(passphrase: str) -> dict:
         "goals/goals.json",
         "insurance/policies.json",
         "taxes/**/*.json",
+        "bank_sync/token_cache.json",
     ]
 
     for pattern in sensitive_patterns:
@@ -520,6 +587,23 @@ def encrypt_sensitive_files(passphrase: str) -> dict:
                 continue
             encrypt_file(str(path), passphrase)
             encrypted_files.append(str(path.relative_to(finance_dir)))
+
+    # finance.db + originals/ used to stay plaintext next to encrypted JSON, and
+    # engines kept answering from the unencrypted DB.
+    db_path = finance_dir / "finance.db"
+    if db_path.is_file() and not is_blob_encrypted(db_path):
+        try:  # fold the WAL into the main file so nothing plaintext is left behind
+            import sqlite3
+            with sqlite3.connect(db_path) as conn:
+                conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception:
+            pass
+    for target in _blob_targets(finance_dir):
+        if not is_blob_encrypted(target):
+            encrypt_blob(str(target), passphrase)
+            encrypted_files.append(str(target.relative_to(finance_dir)))
+    for sidecar in ("finance.db-wal", "finance.db-shm"):
+        (finance_dir / sidecar).unlink(missing_ok=True)
 
     harden_permissions()  # Secure file system permissions too
     _log_access("encrypt", f"Encrypted {len(encrypted_files)} files")
@@ -540,6 +624,11 @@ def decrypt_sensitive_files(passphrase: str) -> dict:
                 decrypted_files.append(str(path.relative_to(finance_dir)))
         except (json.JSONDecodeError, UnicodeDecodeError):
             continue
+
+    for target in _blob_targets(finance_dir):
+        if is_blob_encrypted(target):
+            decrypt_blob(str(target), passphrase)
+            decrypted_files.append(str(target.relative_to(finance_dir)))
 
     _log_access("decrypt", f"Decrypted {len(decrypted_files)} files")
     return {
@@ -623,7 +712,8 @@ def get_privacy_summary() -> str:
         "  - Bank login credentials, passwords, PINs, TANs",
         "  - Full IBAN or credit card numbers",
         "  - Tax IDs, passport numbers, SSNs",
-        "  - Raw bank API tokens or access credentials\n",
+        "  - Bank API secrets (GoCardless credentials are stored encrypted; only a",
+        "    short-lived ~24h access token is cached, encrypted by 'encrypt my data')\n",
         "What we store (structured summaries only):",
         "  - Account names and balances (not account numbers)",
         "  - Transaction amounts, dates, and categories",
@@ -641,6 +731,11 @@ def get_privacy_summary() -> str:
         "  - Sanitize for sharing: sanitize_for_sharing(data)",
         "  - View access log:     get_access_log()",
         "",
-        "All data stays on your machine. Nothing is ever uploaded.",
+        "Your data stays on your machine. Network calls are opt-in and carry no",
+        "personal data except where noted: exchange rates (api.frankfurter.app),",
+        "stock prices (Yahoo Finance), crypto prices (CoinGecko) send only tickers/",
+        "currency codes; GoCardless bank sync (opt-in) talks to your bank via GoCardless.",
+        "Original statements you import are copied to .finance/originals/ (encrypted",
+        "with the rest when you say 'encrypt my data'). See docs/SECURITY.md.",
     ]
     return "\n".join(lines)

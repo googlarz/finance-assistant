@@ -277,3 +277,34 @@ def test_privacy_summary_contains_key_sections(isolated_finance_dir):
     assert "NEVER store" in summary
     assert "harden_permissions" in summary
     assert "ensure_gitignore" in summary
+
+
+def test_encrypt_covers_db_and_originals_and_roundtrips(isolated_finance_dir_db):
+    import data_safety as ds
+    from finance_storage import get_finance_dir
+    from account_manager import add_account
+    from db import is_encrypted
+    add_account({"name": "Checking", "type": "checking", "current_balance": 1})
+    fdir = get_finance_dir()
+    (fdir / "originals").mkdir(exist_ok=True)
+    (fdir / "originals" / "stmt.csv").write_text("date,amount\n2026-01-01,-5\n")
+    pw = "correct horse battery 42"
+    res = ds.encrypt_sensitive_files(pw)
+    assert "finance.db" in res["files"] and "originals/stmt.csv" in res["files"]
+    assert is_encrypted()
+    assert b"Checking" not in (fdir / "finance.db").read_bytes()
+    assert b"date,amount" not in (fdir / "originals" / "stmt.csv").read_bytes()
+    assert not (fdir / "finance.db-wal").exists()
+    ds.decrypt_sensitive_files(pw)
+    assert not is_encrypted()
+    assert (fdir / "originals" / "stmt.csv").read_text().startswith("date,amount")
+    from account_manager import list_accounts
+    assert [a["name"] for a in list_accounts()] == ["Checking"]
+
+
+def test_backup_rejects_weak_passphrase(monkeypatch):
+    import backup
+    monkeypatch.setattr("getpass.getpass", lambda *_: "a")
+    import pytest
+    with pytest.raises(ValueError):
+        backup._read_passphrase(confirm=True)

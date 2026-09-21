@@ -442,7 +442,8 @@ def get_profile_completeness_pct() -> int:
 
 def get_locale() -> str:
     p = get_profile()
-    return p.get("meta", {}).get("locale") or p.get("tax_profile", {}).get("locale") or "de"
+    code = p.get("meta", {}).get("locale") or p.get("tax_profile", {}).get("locale") or "de"
+    return "uk" if code == "gb" else code  # legacy wizard code
 
 
 def get_primary_currency() -> str:

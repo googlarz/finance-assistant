@@ -7,6 +7,8 @@ calculations to prompt the user to explore adjacent options.
 
 from __future__ import annotations
 
+from currency import currency_symbol as _S
+
 from copy import deepcopy
 from typing import Optional
 
@@ -44,9 +46,9 @@ def _variants_fire_calc(base_inputs: dict, base_result: dict) -> list[dict]:
     # A) +€200/month contribution
     extra = 200.0
     variants.append({
-        "label": f"Add €{extra:.0f}/month to contributions",
+        "label": f"Add {_S()}{extra:.0f}/month to contributions",
         "inputs": {**base_inputs, "monthly_contribution": base_inputs.get("monthly_contribution", 0) + extra},
-        "delta_description": f"retire earlier by contributing €{extra:.0f}/month more",
+        "delta_description": f"retire earlier by contributing {_S()}{extra:.0f}/month more",
         "index": 0,
     })
 
@@ -63,7 +65,7 @@ def _variants_fire_calc(base_inputs: dict, base_result: dict) -> list[dict]:
     current_expenses = base_inputs.get("annual_expenses", 0)
     lean_expenses = current_expenses * 0.9
     variants.append({
-        "label": f"Lean FIRE: target €{lean_expenses:,.0f}/year (10% less)",
+        "label": f"Lean FIRE: target {_S()}{lean_expenses:,.0f}/year (10% less)",
         "inputs": {**base_inputs, "annual_expenses": lean_expenses},
         "delta_description": "retire earlier by reducing target spend by 10%",
         "index": 2,
@@ -78,9 +80,9 @@ def _variants_debt_optimizer(base_inputs: dict, base_result: dict) -> list[dict]
 
     extra = 100.0
     variants.append({
-        "label": f"Add €{extra:.0f}/month extra payment",
+        "label": f"Add {_S()}{extra:.0f}/month extra payment",
         "inputs": {**base_inputs, "extra_monthly_payment": base_inputs.get("extra_monthly_payment", 0) + extra},
-        "delta_description": f"pay off sooner and save interest with €{extra:.0f}/month extra",
+        "delta_description": f"pay off sooner and save interest with {_S()}{extra:.0f}/month extra",
         "index": 0,
     })
 
@@ -109,7 +111,7 @@ def _variants_rent_vs_buy(base_inputs: dict, base_result: dict) -> list[dict]:
 
     home_price = base_inputs.get("home_price", 0)
     variants.append({
-        "label": f"House price 10% lower (€{home_price * 0.9:,.0f})",
+        "label": f"House price 10% lower ({_S()}{home_price * 0.9:,.0f})",
         "inputs": {**base_inputs, "home_price": home_price * 0.9},
         "delta_description": "how a 10% lower purchase price shifts the buy/rent breakeven",
         "index": 0,
@@ -140,16 +142,16 @@ def _variants_savings_goal(base_inputs: dict, base_result: dict) -> list[dict]:
 
     extra = 50.0
     variants.append({
-        "label": f"Add €{extra:.0f}/month",
+        "label": f"Add {_S()}{extra:.0f}/month",
         "inputs": {**base_inputs, "monthly_contribution": base_inputs.get("monthly_contribution", 0) + extra},
-        "delta_description": f"reach goal X months sooner with €{extra:.0f}/month more",
+        "delta_description": f"reach goal X months sooner with {_S()}{extra:.0f}/month more",
         "index": 0,
     })
 
     target = base_inputs.get("target_amount", 0)
     lower_target = target * 0.9
     variants.append({
-        "label": f"Lower target by 10% (€{lower_target:,.0f})",
+        "label": f"Lower target by 10% ({_S()}{lower_target:,.0f})",
         "inputs": {**base_inputs, "target_amount": lower_target},
         "delta_description": "reach goal sooner with a 10% lower target",
         "index": 1,

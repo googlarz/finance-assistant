@@ -311,6 +311,12 @@ def init_db() -> None:
             )
 
 
+def is_encrypted() -> bool:
+    """True when finance.db has been encrypted by 'encrypt my data' and must be decrypted first."""
+    from data_safety import is_blob_encrypted
+    return is_blob_encrypted(get_db_path())
+
+
 def is_initialized() -> bool:
     """True if the DB file exists, has tables, and schema_version is current."""
     path = get_db_path()

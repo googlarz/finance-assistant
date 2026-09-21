@@ -17,6 +17,8 @@ Usage:
 
 from __future__ import annotations
 
+from currency import currency_symbol as _S
+
 import os
 from datetime import date, datetime, timedelta
 from typing import Optional
@@ -67,6 +69,13 @@ def _budget_alerts(today: date) -> list[dict]:
     budget = load_json(budget_path)
     if not budget:
         return alerts
+    try:
+        from budget_engine import update_budget_actuals
+        refreshed = update_budget_actuals(year, month)
+        if "error" not in refreshed:
+            budget = refreshed
+    except Exception:
+        pass
 
     limits = budget.get("category_limits", {})
     actuals_raw = budget.get("actuals", {})
@@ -93,14 +102,14 @@ def _budget_alerts(today: date) -> list[dict]:
             alerts.append(_alert(
                 "critical", "budget",
                 f"Over budget: {cat}",
-                f"Spent €{actual:.0f} of €{planned:.0f} planned (+€{over:.0f}, {days_remaining}d left)",
+                f"Spent {_S()}{actual:.0f} of {_S()}{planned:.0f} planned (+{_S()}{over:.0f}, {days_remaining}d left)",
                 f"Review {cat} spending and adjust remaining purchases.",
             ))
         elif usage >= 0.9 and days_remaining > 5:
             alerts.append(_alert(
                 "warning", "budget",
                 f"Budget almost full: {cat}",
-                f"Used {usage*100:.0f}% (€{actual:.0f}/€{planned:.0f}) with {days_remaining} days left",
+                f"Used {usage*100:.0f}% ({_S()}{actual:.0f}/{_S()}{planned:.0f}) with {days_remaining} days left",
                 f"Slow down {cat} spending or increase the budget.",
             ))
         elif usage >= 0.8 and days_remaining > 10 and month_progress < 0.7:
@@ -108,7 +117,7 @@ def _budget_alerts(today: date) -> list[dict]:
                 "warning", "budget",
                 f"Pacing fast: {cat}",
                 f"Already {usage*100:.0f}% used at {month_progress*100:.0f}% of month",
-                f"At this rate you'll overspend {cat} by ~€{(actual/month_progress - planned):.0f}.",
+                f"At this rate you'll overspend {cat} by ~{_S()}{(actual/month_progress - planned):.0f}.",
             ))
 
     return alerts
@@ -303,7 +312,7 @@ def _fire_alert(profile: dict, today: date) -> list[dict]:
     return [_alert(
         "info", "investments",
         f"FIRE progress: {pct:.1f}%",
-        f"[{bar}] €{total_invested:,.0f} / €{fire_target:,.0f}",
+        f"[{bar}] {_S()}{total_invested:,.0f} / {_S()}{fire_target:,.0f}",
         ("Portfolio value estimated from cost basis — update current prices for accuracy. " if using_cost_basis else "") + "Keep investing consistently. Review allocation if needed.",
     )]
 
@@ -320,7 +329,7 @@ def _threshold_alerts(profile: dict) -> list[dict]:
         return []
 
     try:
-        nw_data = calculate_net_worth(profile) or {}
+        nw_data = calculate_net_worth() or {}
         portfolio_data = get_portfolio() or {}
         holdings = portfolio_data.get("holdings", [])
         using_cost_basis = any(h.get("current_value") is None for h in holdings)
@@ -591,7 +600,7 @@ def get_session_alerts(profile: Optional[dict] = None) -> list[dict]:
                 all_alerts.append(_alert(
                     "info",
                     "debt",
-                    f"Switching to avalanche could save €{interest_saved:,.0f} in interest",
+                    f"Switching to avalanche could save {_S()}{interest_saved:,.0f} in interest",
                     f"And get you debt-free {months_saved} month(s) sooner across {len(debts)} debts.",
                     "Say 'compare debt strategies' for the full breakdown.",
                 ))
@@ -601,7 +610,7 @@ def get_session_alerts(profile: Optional[dict] = None) -> list[dict]:
     # Recurring subscriptions — flag total monthly burden + duplicates
     try:
         from subscription_detector import get_for_account, summarize
-        subs = get_for_account(account_id="default")
+        subs = get_for_account(account_id="all")
         s = summarize(subs)
 
         # Highest-value: subscriptions the user flagged to cancel but are STILL charging
@@ -613,7 +622,7 @@ def get_session_alerts(profile: Optional[dict] = None) -> list[dict]:
                     "warning",
                     "subscriptions",
                     f"'{z['merchant']}' still charging — you flagged it to cancel",
-                    f"€{abs(z['monthly_cost']):.2f}/mo is still going out since you flagged it.",
+                    f"{_S()}{abs(z['monthly_cost']):.2f}/mo is still going out since you flagged it.",
                     f"Cancel it with the provider, then say 'mark {z['merchant']} cancelled'.",
                 ))
         except Exception:
@@ -631,8 +640,8 @@ def get_session_alerts(profile: Optional[dict] = None) -> list[dict]:
             all_alerts.append(_alert(
                 "info",
                 "subscriptions",
-                f"{s['active_count']} active subscriptions — €{s['total_monthly']:,.0f}/mo "
-                f"(€{s['total_yearly']:,.0f}/yr)",
+                f"{s['active_count']} active subscriptions — {_S()}{s['total_monthly']:,.0f}/mo "
+                f"({_S()}{s['total_yearly']:,.0f}/yr)",
                 f"That's about {s['total_yearly']:.0f}/yr in recurring charges.",
                 "Say 'show subscriptions' to review.",
             ))

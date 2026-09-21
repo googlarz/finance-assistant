@@ -80,7 +80,7 @@ All amounts use the `Money` class (backed by `Decimal`) to avoid floating-point 
 
 ## Data Storage Layout
 
-All data is project-local in `.finance/`. No cloud sync, no external APIs, no telemetry.
+All data is project-local in `.finance/`. No cloud sync, no telemetry. Opt-in network calls (exchange rates, stock/crypto prices, GoCardless bank sync) are listed in [SECURITY.md](SECURITY.md#network-calls-opt-in).
 
 As of v3.0, the primary store is **SQLite** (`finance.db`, WAL mode). JSON files are kept as a human-readable backup and for compatibility; new writes go to both.
 
@@ -305,7 +305,7 @@ If you're writing a new format parser or touching multi-account/transfer handlin
 ```bash
 # Full suite (main + locales + official validation)
 python3 -m pytest tests/ locales/tests/ locales/validation/ -q
-# 1,519 tests — all modules, all locales, all official tax authority cases
+# 1,565 tests — all modules, all locales, all official tax authority cases
 
 python3 -m pytest tests/ -v                    # main skill only
 python3 -m pytest locales/tests/ -v            # locale tax tests

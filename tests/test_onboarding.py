@@ -192,7 +192,7 @@ class TestParseTax:
         assert r["steuerklasse"] == 4
 
     def test_uk_tax_code(self):
-        r = parse_step_response("tax", "1257L, no self-assessment", locale="gb")
+        r = parse_step_response("tax", "1257L, no self-assessment", locale="uk")
         assert r["tax_code"] == "1257L"
         assert r["self_assessment"] is False
 
@@ -454,7 +454,7 @@ class TestGetStepPrompt:
         assert "Steuerklasse" in p
 
     def test_tax_gb_has_tax_code(self):
-        p = get_step_prompt("tax", locale="gb")
+        p = get_step_prompt("tax", locale="uk")
         assert "tax code" in p.lower()
 
     def test_tax_fr_has_parts(self):
@@ -645,3 +645,53 @@ class TestGetStepValuePreview:
             result = get_step_value_preview(step, sample_data.get(step, {}))
             assert isinstance(result, str), f"step {step} did not return a string"
             assert len(result) > 0, f"step {step} returned empty string"
+
+
+class TestLocaleReachability:
+    """Every locale the wizard can emit must be accepted by the tax engine."""
+
+    def test_wizard_locales_accepted_by_tax_engine(self):
+        import onboarding, tax_engine
+        for code in set(onboarding._COUNTRY_TO_LOCALE.values()):
+            tax_engine._validate_locale_code(code)
+
+    def test_every_locale_dir_reachable_from_wizard(self):
+        import os, onboarding
+        root = os.path.join(os.path.dirname(os.path.dirname(__file__)), "locales")
+        dirs = {d for d in os.listdir(root)
+                if os.path.exists(os.path.join(root, d, "tax_calculator.py"))}
+        assert dirs <= set(onboarding._COUNTRY_TO_LOCALE.values())
+
+    def test_uk_and_ireland_parse(self):
+        from onboarding import parse_step_response
+        assert parse_step_response("basics", "I'm Sam, I live in the UK")["locale"] == "uk"
+        assert parse_step_response("basics", "I'm Sam, I live in Ireland")["locale"] == "ie"
+
+    def test_legacy_gb_profile_normalized(self, monkeypatch):
+        import profile_manager
+        monkeypatch.setattr(profile_manager, "get_profile", lambda: {"meta": {"locale": "gb"}})
+        assert profile_manager.get_locale() == "uk"
+
+
+class TestWizardFeedsEngines:
+    def test_wizard_answers_reach_engines_and_are_idempotent(self):
+        from onboarding import complete_step, parse_step_response
+        import account_manager, goal_tracker, debt_optimizer, investment_tracker, budget_engine
+        import datetime
+        complete_step("basics", parse_step_response("basics", "I'm Sam, I live in Germany"))
+        complete_step("employment", {"gross_annual": 60000})
+        acc = parse_step_response("accounts", "DKB checking and N26 savings")
+        for _ in range(2):
+            complete_step("accounts", acc)
+            complete_step("goals", {"goals": [{"name": "Holiday", "target_amount": 3000}]})
+            complete_step("debts", {"debts": [{"name": "Car loan", "balance": 5000.0,
+                                                "rate": 4.5, "type": "loan"}]})
+            complete_step("investments", {"investments": [{"name": "MSCI ETF",
+                                                            "value": 2000.0, "type": "etf"}]})
+            complete_step("budget", {"budget_method": "50-30-20"})
+        assert len(account_manager.list_accounts()) == 2
+        assert [g["name"] for g in goal_tracker.get_goals()] == ["Holiday"]
+        assert len(debt_optimizer.get_debts()) == 1
+        assert len(investment_tracker.get_portfolio()["holdings"]) == 1
+        t = datetime.date.today()
+        assert budget_engine.get_budget(t.year, t.month)["income_target"] == 5000.0

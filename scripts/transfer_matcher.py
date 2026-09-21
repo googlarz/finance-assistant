@@ -41,7 +41,8 @@ Jan of the next year alongside the requested year.
 
 from __future__ import annotations
 
-from datetime import datetime
+from bisect import bisect_left, bisect_right
+from datetime import datetime, timedelta
 from typing import Optional
 
 try:
@@ -88,6 +89,18 @@ def _txn_year(txn: dict, fallback: int) -> int:
     return d.year if d else fallback
 
 
+_rate_cache: dict = {}
+
+
+def _converted(amount: float, from_cur: str, to_cur: str) -> float:
+    """currency.convert() without re-reading the rate file for every pair."""
+    from currency import get_exchange_rate, _decimals
+    key = (from_cur, to_cur)
+    if key not in _rate_cache:
+        _rate_cache[key] = get_exchange_rate(from_cur, to_cur)[0]
+    return round(amount * _rate_cache[key], _decimals(to_cur))
+
+
 def _amounts_match(a: dict, b: dict) -> bool:
     """Same-currency: exact opposite amounts (unchanged v1 rule).
     Cross-currency: b's amount, converted into a's currency at the current
@@ -103,8 +116,7 @@ def _amounts_match(a: dict, b: dict) -> bool:
     if not a_cur or not b_cur:
         return False
     try:
-        from currency import convert
-        b_in_a_currency, _confidence = convert(b_amt, b_cur, a_cur)
+        b_in_a_currency = _converted(b_amt, b_cur, a_cur)
     except Exception:
         return False
 
@@ -121,27 +133,36 @@ def find_pairs(txns: list[dict]) -> list[tuple[dict, dict]]:
     what pool to pass (already-transfer rows for Tier 2, ordinary flow rows
     for Tier 3/retro) and what to do with the result (link vs. suggest).
     """
+    _rate_cache.clear()  # rates are read once per call, not once per comparison
     pool = [t for t in txns if t.get("id") and t.get("date") and t.get("account_id")]
     pool.sort(key=lambda t: (t.get("date", ""), t.get("id", "")))
     by_id = {t["id"]: t for t in pool}
 
+    # Index rows by parsed date so a candidate search only visits rows inside
+    # the widest possible settlement window instead of scanning the whole pool.
+    parsed = {t["id"]: _parse_date(t) for t in pool}
+    dated = sorted((parsed[t["id"]], i) for i, t in enumerate(pool) if parsed[t["id"]] is not None)
+    dated_keys = [d for d, _ in dated]
+    reach = timedelta(days=CC_PAYMENT_WINDOW_DAYS + 1)
+
     def candidates_for(a: dict, exclude: set) -> list[dict]:
         a_amt = round(float(a.get("amount", 0)), 2)
-        a_date = _parse_date(a)
+        a_date = parsed[a["id"]]
         if a_amt == 0 or a_date is None:
             return []
         win = _window_for(a)
         out = []
-        for b in pool:
+        lo = bisect_left(dated_keys, a_date - reach)
+        hi = bisect_right(dated_keys, a_date + reach)
+        for _, bi in sorted(dated[lo:hi], key=lambda e: e[1]):  # keep pool order
+            b = pool[bi]
             if b["id"] == a["id"] or b["id"] in exclude:
                 continue
             if b.get("account_id") == a.get("account_id"):
                 continue
             if not _amounts_match(a, b):
                 continue
-            b_date = _parse_date(b)
-            if b_date is None:
-                continue
+            b_date = parsed[b["id"]]
             if abs((b_date - a_date).days) > max(win, _window_for(b)):
                 continue
             out.append(b)

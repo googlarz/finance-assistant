@@ -237,7 +237,7 @@ def format_subscriptions(subscriptions: list[dict], currency: str = "EUR") -> st
     return "\n".join(lines)
 
 
-def get_for_account(account_id: str = "default", years_back: int = 2) -> list[dict]:
+def get_for_account(account_id: str = "all", years_back: int = 2) -> list[dict]:
     """Convenience: load transactions for an account and detect subscriptions."""
     try:
         from transaction_logger import get_transactions

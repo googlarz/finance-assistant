@@ -175,6 +175,30 @@ def resume_recurring(recurring_id: str) -> Optional[dict]:
     return update_recurring(recurring_id, {"status": "active"})
 
 
+def _already_booked(item: dict, due: date) -> bool:
+    """True when a bank-imported/manual transaction already covers this occurrence
+    (same amount, +-3 days) — generating it too would double-count the payment."""
+    try:
+        from transaction_logger import get_transactions
+        rows = get_transactions(account_id=item["account_id"], year=due.year)
+        if due.month == 1:
+            rows += get_transactions(account_id=item["account_id"], year=due.year - 1)
+        elif due.month == 12:
+            rows += get_transactions(account_id=item["account_id"], year=due.year + 1)
+    except Exception:
+        return False
+    for t in rows:
+        if str(t.get("description", "")).startswith("[recurring]"):
+            continue
+        try:
+            close = abs((date.fromisoformat(t["date"][:10]) - due).days) <= 3
+        except (KeyError, ValueError):
+            continue
+        if close and abs(float(t.get("amount", 0)) - item["amount"]) < 0.01:
+            return True
+    return False
+
+
 def generate_due_transactions(as_of: Optional[str] = None) -> dict:
     """
     Check all active recurrings and generate transactions for any that are due.
@@ -184,6 +208,7 @@ def generate_due_transactions(as_of: Optional[str] = None) -> dict:
     items = _load_recurrings()
     generated = []
     skipped = []
+    skipped_booked = []
 
     for item in items:
         if item.get("status") != "active":
@@ -203,6 +228,9 @@ def generate_due_transactions(as_of: Optional[str] = None) -> dict:
         due_dates = _calculate_due_dates(item, last_gen, today)
 
         for due_date in due_dates:
+            if _already_booked(item, due_date):
+                skipped_booked.append({"recurring_id": item["id"], "date": due_date.isoformat()})
+                continue
             txn = add_transaction(
                 date=due_date.isoformat(),
                 type=item["type"],
@@ -234,6 +262,7 @@ def generate_due_transactions(as_of: Optional[str] = None) -> dict:
         "generated_count": len(generated),
         "generated": generated,
         "skipped_count": len(skipped),
+        "already_booked": skipped_booked,
     }
 
 

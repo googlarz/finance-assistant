@@ -1,7 +1,7 @@
 # Finance Assistant
 
-[![version](https://img.shields.io/badge/version-4.0.1-blue)](https://github.com/googlarz/finance-assistant/releases)
-[![tests](https://img.shields.io/badge/tests-1%2C519%20passing-brightgreen)](docs/ARCHITECTURE.md#testing)
+[![version](https://img.shields.io/badge/version-4.1.0-blue)](https://github.com/googlarz/finance-assistant/releases)
+[![tests](https://img.shields.io/badge/tests-1%2C565%20passing-brightgreen)](docs/ARCHITECTURE.md#testing)
 [![tax cases](https://img.shields.io/badge/tax%20law-39%20official%20cases-success)](#locales--validation)
 [![locales](https://img.shields.io/badge/locales-DE·UK·US·FR·NL·PL·IE-orange)](#locales--validation)
 [![local-first](https://img.shields.io/badge/local--first-no%20cloud-black)](docs/SECURITY.md)
@@ -11,7 +11,7 @@
 
 A personal finance copilot that applies actual tax statute to your real numbers — not estimates, not vibes. Runs locally through [Claude Code](https://claude.com/product/claude-code); your data never leaves your machine. Open source, free forever.
 
-`7 locales` · `14 bank formats + any file via LLM` · `Monte Carlo FIRE` · `1,519 tests`
+`7 locales` · `14 bank formats + any file via LLM` · `Monte Carlo FIRE` · `1,565 tests`
 
 **[→ Live demo](https://googlarz.github.io/finance-assistant/)** — see a real conversation without installing
 
@@ -204,13 +204,13 @@ All seven are validated against **39 official tax-authority test cases** (BMF, H
 
 ## Privacy & security
 
-Local-first by design. Your data lives only in `.finance/` on your machine — no cloud, no telemetry, nothing uploaded.
+Local-first by design. Your data lives in `.finance/` on your machine — no cloud sync, no telemetry, nothing uploaded. A few **opt-in** features make network calls (exchange rates, stock/crypto prices, GoCardless bank sync) — exactly which and what they send is listed in [docs/SECURITY.md](docs/SECURITY.md#network-calls-opt-in).
 
-- **Encrypted at rest** — Fernet (AES-128-CBC + HMAC-SHA256), PBKDF2 480k iterations, atomic writes.
+- **Encrypted at rest** — say "encrypt my data": JSON files, `finance.db`, and imported originals are Fernet-encrypted (AES-128-CBC + HMAC-SHA256, PBKDF2 480k iterations, atomic writes); decrypt before use.
 - **Hardened** — `.finance/` is chmod 600/700 and auto-added to `.gitignore` on first run.
 - **You own the delete button** — wipe any category or everything, one command.
-- **Audit log** — every change is recorded; `--audit` shows what happened.
-- **Never stored** — bank credentials, IBANs, card numbers, government IDs, raw documents.
+- **Audit log** — every change is recorded in `~/.finance/audit.log` (outside `.finance/`, plaintext amounts + descriptions; removed by delete-all); `--audit` shows it.
+- **Never stored** — bank credentials, IBANs, card numbers, government IDs. Statements you import are copied to `.finance/originals/` (pass `keep_original=False` to skip).
 
 This protects your data **at rest**. By default Claude Code still sends the **conversation** to Anthropic's API — for zero egress, route it through a local model ([Sovereignty mode](docs/sovereignty.md)).
 

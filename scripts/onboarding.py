@@ -55,31 +55,28 @@ STEP_LABELS = {
 # Country code → locale mapping
 _COUNTRY_TO_LOCALE: dict[str, str] = {
     "germany": "de", "deutschland": "de", "de": "de",
-    "uk": "gb", "united kingdom": "gb", "england": "gb", "gb": "gb", "britain": "gb",
+    "uk": "uk", "united kingdom": "uk", "england": "uk", "gb": "uk", "britain": "uk",
+    "ireland": "ie", "éire": "ie", "ie": "ie",
     "france": "fr", "frankreich": "fr", "fr": "fr",
     "netherlands": "nl", "holland": "nl", "nl": "nl",
     "poland": "pl", "polska": "pl", "pl": "pl",
-    "austria": "at", "österreich": "at", "at": "at",
-    "switzerland": "ch", "schweiz": "ch", "ch": "ch",
     "usa": "us", "us": "us", "united states": "us", "america": "us",
 }
 
 _COUNTRY_CURRENCY: dict[str, str] = {
-    "de": "EUR", "fr": "EUR", "nl": "EUR", "at": "EUR",
-    "gb": "GBP",
-    "ch": "CHF",
+    "de": "EUR", "fr": "EUR", "nl": "EUR", "ie": "EUR",
+    "uk": "GBP",
     "pl": "PLN",
     "us": "USD",
 }
 
 _LOCALE_NAMES: dict[str, str] = {
     "de": "German",
-    "gb": "UK",
+    "uk": "UK",
+    "ie": "Irish",
     "fr": "French",
     "nl": "Dutch",
     "pl": "Polish",
-    "at": "Austrian",
-    "ch": "Swiss",
     "us": "US",
 }
 
@@ -265,7 +262,7 @@ def get_step_prompt(step: str, locale: str = None) -> str:
                 "(E.g. 'Klasse 1, no Kirchensteuer, Berlin' — or just what you know, "
                 "I'll fill in defaults for the rest)"
             )
-        if locale == "gb":
+        if locale == "uk":
             return (
                 f"Step {idx} of {total} — Tax\n\n"
                 "Almost done — just a couple of UK tax questions.\n\n"
@@ -554,7 +551,7 @@ def _parse_basics(text: str, lower: str) -> dict:
     # Extract country
     for country_str, code in _COUNTRY_TO_LOCALE.items():
         if re.search(r'\b' + re.escape(country_str) + r'\b', lower):
-            result["country"] = code.upper()
+            result["country"] = "GB" if code == "uk" else code.upper()
             result["locale"] = code
             result["currency"] = _COUNTRY_CURRENCY.get(code, "EUR")
             break
@@ -974,7 +971,7 @@ def _parse_tax(text: str, lower: str, locale: str) -> dict:
                 result["bundesland"] = bl
                 break
 
-    elif locale == "gb":
+    elif locale == "uk":
         # Tax code e.g. 1257L
         tax_code_match = re.search(r'\b(\d{3,4}[LMN])\b', text.upper())
         if tax_code_match:
@@ -1074,9 +1071,74 @@ def complete_step(step: str, data: dict) -> dict:
 
     # Persist to profile
     _apply_step_to_profile(step, data)
+    _persist_to_engines(step, data)
 
     save_onboarding_state(state)
     return state
+
+
+def _persist_to_engines(step: str, data: dict) -> None:
+    """Hand wizard answers to the real engines (idempotent by name).
+
+    Before this, accounts/goals/debts/holdings/budget lived only in
+    profile.meta.onboarding_* and every engine stayed empty after setup.
+    """
+    profile = get_profile()
+    currency = profile.get("meta", {}).get("primary_currency") or "EUR"
+
+    if step == "accounts":
+        from account_manager import add_account, list_accounts
+        have = {a.get("name", "").lower() for a in list_accounts()}
+        for a in data.get("accounts") or []:
+            name = f"{a['bank']} {a['type']}".title()
+            if name.lower() in have:
+                continue
+            kind = a["type"] if a["type"] in ("checking", "savings") else "investment"
+            add_account({"name": name, "type": kind, "institution": a["bank"],
+                         "currency": currency})
+            have.add(name.lower())
+
+    elif step == "goals":
+        from goal_tracker import add_goal, get_goals
+        have = {g.get("name", "").lower() for g in get_goals()}
+        for g in data.get("goals") or []:
+            if g["name"].lower() in have or not g.get("target_amount"):
+                continue
+            add_goal({"name": g["name"], "target_amount": g["target_amount"],
+                      "currency": currency})
+            have.add(g["name"].lower())
+
+    elif step == "debts":
+        from debt_optimizer import add_debt, get_debts
+        have = {d.get("name", "").lower() for d in get_debts()}
+        for d in data.get("debts") or []:
+            if d["name"].lower() in have:
+                continue
+            add_debt({"name": d["name"], "type": d["type"], "balance": d["balance"],
+                      "interest_rate": d["rate"], "currency": currency})
+            have.add(d["name"].lower())
+
+    elif step == "investments":
+        from investment_tracker import add_holding, get_portfolio
+        have = {h.get("name", "").lower() for h in get_portfolio().get("holdings", [])}
+        for i in data.get("investments") or []:
+            if i["name"].lower() in have:
+                continue
+            add_holding({"name": i["name"], "type": i["type"],
+                         "current_value": i["value"], "cost_basis": i["value"],
+                         "currency": currency})
+            have.add(i["name"].lower())
+
+    elif step == "budget":
+        gross = profile.get("employment", {}).get("annual_gross")
+        if gross:
+            import datetime
+            from budget_engine import create_budget, get_budget
+            today = datetime.date.today()
+            if not get_budget(today.year, today.month):
+                create_budget(today.year, today.month,
+                              method=data.get("budget_method", "50-30-20"),
+                              income_target=round(gross / 12, 2), currency=currency)
 
 
 def _apply_step_to_profile(step: str, data: dict) -> None:
