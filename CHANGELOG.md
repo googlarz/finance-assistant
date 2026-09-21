@@ -1,5 +1,31 @@
 # Changelog
 
+## v4.2.0 — 2026-09-21
+
+Focus: reliability (catch the bugs that hide behind `except Exception`), a faster first run, and verified tax rules.
+
+### Fixed
+- **Onboarding parser** (found by the new journey tests): `72000` was read as 720 and `€65000` as 650 (100x wrong income feeding tax, budget and digest); "Pieter **de** Vries ... Netherlands" was routed to Germany; "DKB checking and ING savings" produced two checking accounts; a lowercase word after "I'm" was captured as part of the name.
+- **Budget comparison** (`comparison_engine`) was always empty: it called `get_budget()` without its required arguments (swallowed) and read a `categories` key budgets don't have.
+- `tax_engine.get_tax_summary` returned `"year": null` when no year was passed; it now defaults to the current year.
+- Removed an unreachable line in `budget_engine._db_available` that referenced an undefined name.
+- `--doctor` no longer reports Python 3.9 as a failure for the skill (only the optional MCP server needs 3.10+).
+
+### Added
+- **`tests/test_call_signatures.py`**: a static check that every cross-module call in `scripts/` matches the callee's signature. This is the class of bug that hid net worth from the weekly digest for weeks; it now fails CI.
+- **`tests/test_journeys.py`**: full user journeys for all 7 locales (onboarding → import → tax → net worth → budget → digest → alerts), including a variant that bypasses error-swallowing wrappers.
+- **`tests/test_tax_properties.py`**: property tests over every locale's tax calculator (tax between 0 and gross; tax and total burden monotonic in gross; net never falls as gross rises; joint/married never worse than single where the rule is unambiguous). No genuine cliffs found.
+- **`install.sh`**: one command to clone (or update), install dependencies and run the health check.
+- **Launch kit** in `docs/launch/` (transcript of the real demo, post drafts, checklist) and an animated `assets/demo.svg`.
+
+### Verified
+- Capital-gains rates and allowances (DE Abgeltungsteuer 25% + 5.5% Soli, Sparer-Pauschbetrag 1,000/2,000, 30% Teilfreistellung for equity funds; UK CGT 3,000 exempt amount and 18%/24% rates; IE 33% with 1,270 exemption) were checked against primary sources on 2026-09-21 (gesetze-im-internet.de, gov.uk, revenue.ie). The model remains simplified (no UK share-matching or Section 104 pooling, no DE loss-pot rules, no church tax): a planning aid, not a filing figure.
+
+### CI
+- Test matrix on Python 3.10, 3.11, 3.12, 3.13 (Linux) and 3.12 (macOS); ruff now fails the build on syntax errors and undefined names (style rules stay advisory); the package build is checked on every run.
+
+Full suite: 1,615 passed (was 1,565).
+
 ## v4.1.0 — 2026-09-21
 
 Focus: the first sixty seconds, trust, and a ledger that maintains itself.

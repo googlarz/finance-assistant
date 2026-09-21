@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 352" width="800" role="img" aria-label="Terminal replay of the Finance Assistant demo: seeded sample data, net worth and German tax summary">
+<rect width="800" height="352" rx="10" fill="#0d1117"/>
+<rect width="800" height="34" rx="10" fill="#161b22"/><circle cx="20" cy="17" r="6" fill="#ff5f56"/><circle cx="40" cy="17" r="6" fill="#ffbd2e"/><circle cx="60" cy="17" r="6" fill="#27c93f"/>
+<text x="400" y="22" fill="#8b949e" font-family="Menlo,Consolas,monospace" font-size="12" text-anchor="middle">finance-assistant — demo (real output)</text>
+<defs>
+<clipPath id="c0"><rect x="24" y="52" width="0" height="26"><animate attributeName="width" values="0;0;497;497" keyTimes="0;0.0278;0.1244;1" dur="18.0s" repeatCount="indefinite"/></rect></clipPath>
+<clipPath id="c1"><rect x="24" y="86" width="0" height="26"><animate attributeName="width" values="0;0;699;699" keyTimes="0;0.1467;0.1744;1" dur="18.0s" repeatCount="indefinite"/></rect></clipPath>
+<clipPath id="c2"><rect x="24" y="120" width="0" height="26"><animate attributeName="width" values="0;0;203;203" keyTimes="0;0.1967;0.2350;1" dur="18.0s" repeatCount="indefinite"/></rect></clipPath>
+<clipPath id="c3"><rect x="24" y="154" width="0" height="26"><animate attributeName="width" values="0;0;665;665" keyTimes="0;0.2572;0.2850;1" dur="18.0s" repeatCount="indefinite"/></rect></clipPath>
+<clipPath id="c4"><rect x="24" y="188" width="0" height="26"><animate attributeName="width" values="0;0;581;581" keyTimes="0;0.3072;0.3350;1" dur="18.0s" repeatCount="indefinite"/></rect></clipPath>
+<clipPath id="c5"><rect x="24" y="222" width="0" height="26"><animate attributeName="width" values="0;0;287;287" keyTimes="0;0.3572;0.4122;1" dur="18.0s" repeatCount="indefinite"/></rect></clipPath>
+<clipPath id="c6"><rect x="24" y="256" width="0" height="26"><animate attributeName="width" values="0;0;573;573" keyTimes="0;0.4344;0.4622;1" dur="18.0s" repeatCount="indefinite"/></rect></clipPath>
+<clipPath id="c7"><rect x="24" y="290" width="0" height="26"><animate attributeName="width" values="0;0;598;598" keyTimes="0;0.4844;0.5122;1" dur="18.0s" repeatCount="indefinite"/></rect></clipPath>
+</defs>
+<text x="24" y="70" fill="#7ee787" font-family="Menlo,Consolas,'DejaVu Sans Mono',monospace" font-size="14" xml:space="preserve" clip-path="url(#c0)">$ FINANCE_PROJECT_DIR=/tmp/fa_demo python3 skill.py --demo</text>
+<text x="24" y="104" fill="#c9d1d9" font-family="Menlo,Consolas,'DejaVu Sans Mono',monospace" font-size="14" xml:space="preserve" clip-path="url(#c1)">Demo data seeded — sample profile, accounts, transactions, goals, debts, holdings.</text>
+<text x="24" y="138" fill="#7ee787" font-family="Menlo,Consolas,'DejaVu Sans Mono',monospace" font-size="14" xml:space="preserve" clip-path="url(#c2)">$ calculate_net_worth()</text>
+<text x="24" y="172" fill="#c9d1d9" font-family="Menlo,Consolas,'DejaVu Sans Mono',monospace" font-size="14" xml:space="preserve" clip-path="url(#c3)">  "net_worth": 63880.0,  "total_assets": 65980.0,  "total_liabilities": 2100.0</text>
+<text x="24" y="206" fill="#c9d1d9" font-family="Menlo,Consolas,'DejaVu Sans Mono',monospace" font-size="14" xml:space="preserve" clip-path="url(#c4)">  "breakdown": {"cash_and_savings": 41500.0, "investments": 24480.0}</text>
+<text x="24" y="240" fill="#7ee787" font-family="Menlo,Consolas,'DejaVu Sans Mono',monospace" font-size="14" xml:space="preserve" clip-path="url(#c5)">$ get_tax_summary()   # locale de</text>
+<text x="24" y="274" fill="#c9d1d9" font-family="Menlo,Consolas,'DejaVu Sans Mono',monospace" font-size="14" xml:space="preserve" clip-path="url(#c6)">  "gross": 58000.0,  "income_tax": 12991.67,  "social_tax": 11919.0</text>
+<text x="24" y="308" fill="#c9d1d9" font-family="Menlo,Consolas,'DejaVu Sans Mono',monospace" font-size="14" xml:space="preserve" clip-path="url(#c7)">  "total_burden": 24910.67,  "net": 45008.33,  "effective_rate": 0.224</text>
+</svg>

@@ -1,14 +1,16 @@
 """
 Realized capital gains from recorded trades (FIFO) and a rough tax estimate.
 
-Rule sets are 2025-era, simplified, and NOT verified against an official source
-in this repo (no provenance/contract like locales/*): treat estimates as a
-planning aid, not a filing figure. Supported: de, uk, ie. Other locales get the
-gains with no tax figure.
+Rule sets are simplified. The rates/allowances below were checked on 2026-09-21
+against primary sources (DE: gesetze-im-internet.de EStG §32d/§20, SolZG §4, InvStG §20;
+UK: gov.uk CGT rates and allowances, valid 2024/25-2026/27; IE: revenue.ie). The
+simplifications, not the numbers, are the limitation: treat estimates as a planning
+aid, not a filing figure. Supported: de, uk, ie. Other locales get the gains with no
+tax figure.
 
 Assumptions (also returned in the result so nothing is silent):
   de  Abgeltungsteuer 25% + 5.5% Soli on it; Sparer-Pauschbetrag EUR 1,000
-      (2,000 joint); 30% Teilfreistellung on ETF gains/losses; no church tax.
+      (2,000 joint); 30% Teilfreistellung on equity-ETF (Aktienfonds) gains/losses only; no church tax.
   uk  Annual exempt amount GBP 3,000; 24% (higher band) or 18% (basic band).
   ie  33% above the EUR 1,270 annual exemption.
 """
@@ -83,14 +85,14 @@ def estimate_tax(year: int, locale: Optional[str] = None, *, joint: bool = False
         result.update(taxable_after_teilfreistellung=round(taxable, 2), allowance=allowance,
                       tax=round(tax, 2))
         result["assumptions"] = ["25% Abgeltungsteuer + 5.5% Soli", f"Sparer-Pauschbetrag {allowance:.0f}",
-                                 "30% Teilfreistellung on ETFs", "no church tax",
+                                 "30% Teilfreistellung on equity ETFs (Aktienfonds; Misch-/Immobilienfonds differ)", "no church tax",
                                  "one pot: losses offset all gains (share-loss pot rules not modelled)"]
     elif locale == "uk":
         base = max(0.0, gains - 3000.0)
         rate = 0.24 if higher_rate else 0.18
         result.update(allowance=3000.0, rate=rate, tax=round(base * rate, 2))
         result["assumptions"] = ["annual exempt amount 3,000", f"{int(rate * 100)}% rate",
-                                 "no same-day/30-day matching rules", "no pooled Section 104 cost"]
+                                 "18% applies only to the part of the gain inside the unused basic-rate band (37,700 GBP); higher_rate=True is a conservative flat 24%", "no same-day/30-day matching rules", "no pooled Section 104 cost"]
     elif locale == "ie":
         base = max(0.0, gains - 1270.0)
         result.update(allowance=1270.0, rate=0.33, tax=round(base * 0.33, 2))

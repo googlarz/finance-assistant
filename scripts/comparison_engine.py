@@ -203,10 +203,10 @@ def compare_budgets(month: str = None) -> dict:
     # Try to load budget limits
     try:
         from budget_engine import get_budget
-        budget_data = get_budget() or {}
-        limits: dict[str, float] = {}
-        for cat, entry in budget_data.get("categories", {}).items():
-            limits[cat] = entry.get("limit", 0.0)
+        budget_data = get_budget(cur_year, cur_mon) or get_budget(cur_year) or {}
+        limits: dict[str, float] = {
+            cat: float(limit) for cat, limit in budget_data.get("category_limits", {}).items()
+        }
     except Exception:
         limits = {}
 

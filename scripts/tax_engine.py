@@ -202,7 +202,7 @@ def get_tax_summary(profile: Optional[dict] = None, year: Optional[int] = None) 
 
     return {
         "locale": locale,
-        "year": est.get("year") or year,
+        "year": est.get("year") or year or datetime.now().year,
         "gross": round(gross, 2) if gross is not None else None,
         "income_tax": round(income_tax, 2) if income_tax is not None else None,
         "payroll_tax": round(payroll_tax, 2) if payroll_tax is not None else None,

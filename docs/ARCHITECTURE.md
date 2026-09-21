@@ -305,7 +305,7 @@ If you're writing a new format parser or touching multi-account/transfer handlin
 ```bash
 # Full suite (main + locales + official validation)
 python3 -m pytest tests/ locales/tests/ locales/validation/ -q
-# 1,565 tests — all modules, all locales, all official tax authority cases
+# 1,615 tests — all modules, all locales, all official tax authority cases
 
 python3 -m pytest tests/ -v                    # main skill only
 python3 -m pytest locales/tests/ -v            # locale tax tests

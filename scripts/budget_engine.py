@@ -33,7 +33,6 @@ def _db_available() -> bool:
         return is_initialized()
     except Exception:
         return False
-    return _DB_AVAILABLE
 
 
 BUDGET_METHODS = {

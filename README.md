@@ -1,7 +1,7 @@
 # Finance Assistant
 
-[![version](https://img.shields.io/badge/version-4.1.0-blue)](https://github.com/googlarz/finance-assistant/releases)
-[![tests](https://img.shields.io/badge/tests-1%2C565%20passing-brightgreen)](docs/ARCHITECTURE.md#testing)
+[![version](https://img.shields.io/badge/version-4.2.0-blue)](https://github.com/googlarz/finance-assistant/releases)
+[![tests](https://img.shields.io/badge/tests-1%2C615%20passing-brightgreen)](docs/ARCHITECTURE.md#testing)
 [![tax cases](https://img.shields.io/badge/tax%20law-39%20official%20cases-success)](#locales--validation)
 [![locales](https://img.shields.io/badge/locales-DE·UK·US·FR·NL·PL·IE-orange)](#locales--validation)
 [![local-first](https://img.shields.io/badge/local--first-no%20cloud-black)](docs/SECURITY.md)
@@ -11,7 +11,7 @@
 
 A personal finance copilot that applies actual tax statute to your real numbers — not estimates, not vibes. Runs locally through [Claude Code](https://claude.com/product/claude-code); your data never leaves your machine. Open source, free forever.
 
-`7 locales` · `14 bank formats + any file via LLM` · `Monte Carlo FIRE` · `1,565 tests`
+`7 locales` · `14 bank formats + any file via LLM` · `Monte Carlo FIRE` · `1,615 tests`
 
 **[→ Live demo](https://googlarz.github.io/finance-assistant/)** — see a real conversation without installing
 
@@ -20,6 +20,8 @@ A personal finance copilot that applies actual tax statute to your real numbers 
 ---
 
 ## See it work — real output, not a mockup
+
+<p align="center"><img src="assets/demo.svg" alt="Terminal replay of the built-in demo: net worth, German tax summary, reconciliation" width="800"></p>
 
 **FIRE confidence, with the actual distribution:**
 
@@ -92,7 +94,15 @@ Any assistant can *talk* about money. The difference is **law-accurate, bracket-
 
 ## Install
 
-**One line** — clone straight into your skills folder (Claude Code auto-discovers it, no config to edit):
+**Fastest** — one command (clones, installs dependencies, runs the health check; re-run to update):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/googlarz/finance-assistant/main/install.sh | bash
+```
+
+Or manually:
+
+**Manual** — clone straight into your skills folder (Claude Code auto-discovers it, no config to edit):
 
 ```bash
 git clone --recurse-submodules https://github.com/googlarz/finance-assistant.git \
@@ -131,7 +141,7 @@ A conversational copilot across the full personal-finance lifecycle. The highlig
 
 - **Tax, law-accurate** — deductions, filing brief for your accountant, and saveable what-ifs (`W-2 vs 1099`, `single vs MFJ`, `max the 401k?`) computed from real brackets in 7 countries.
 - **Plan & project** — budgets, savings goals, debt avalanche/snowball, FIRE with 10,000-path Monte Carlo, rent-vs-buy and salary-offer comparisons.
-- **Track wealth** — portfolio allocation/XIRR, live stock + crypto prices, net-worth health score. Import a broker trade-history CSV and get FIFO lots plus realized capital gains with a simplified tax estimate for DE/UK/IE (2025-era rules, not verified against official sources — a planning aid, not a filing figure).
+- **Track wealth** — portfolio allocation/XIRR, live stock + crypto prices, net-worth health score. Import a broker trade-history CSV and get FIFO lots plus realized capital gains with a simplified tax estimate for DE/UK/IE (rates and allowances checked against primary sources on 2026-09-21; the model is simplified, so a planning aid, not a filing figure).
 - **Import anything** — 14 bank-CSV formats on a fast path; an unrecognized file (foreign bank, scanned PDF, screenshot) is read by Claude directly, same sanitize→dedupe→confirm pipeline.
 - **Stay ahead** — every session surfaces only what needs attention: budget overspend, upcoming bills, tax deadlines, portfolio drift, zombie subscriptions ("still charging after you flagged it to cancel"), FIRE progress. Stale alerts auto-suppress. Say `hi` for a one-line proactive check-in — it picks the single most relevant thing and asks you about it.
 - **Self-maintaining ledger** — each session books due recurring transactions, refreshes budgets and snapshots, and flags money it can't explain: tell it "my DKB balance on 1 Sep was 1,234.56" and it reconciles against your transactions.

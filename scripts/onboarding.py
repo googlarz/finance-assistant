@@ -542,15 +542,21 @@ def _parse_basics(text: str, lower: str) -> dict:
 
     # Extract name — "I'm Alex", "my name is Alex", "I am Alex"
     name_match = re.search(
-        r"(?:i(?:'m| am)|my name is|name[:\s]+)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)",
-        text, re.IGNORECASE
+        r"(?i:i(?:'m| am)|my name is|name[:\s]+)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)",
+        text
     )
     if name_match:
         result["name"] = name_match.group(1).strip()
 
     # Extract country
-    for country_str, code in _COUNTRY_TO_LOCALE.items():
-        if re.search(r'\b' + re.escape(country_str) + r'\b', lower):
+    def _country_hit(country_str: str) -> bool:
+        if len(country_str) > 2:
+            return bool(re.search(r'\b' + re.escape(country_str) + r'\b', lower))
+        # "de", "us", "at" are also ordinary words/name particles: only accept DE, US, ...
+        return bool(re.search(r'\b' + re.escape(country_str.upper()) + r'\b', text))
+
+    for country_str, code in sorted(_COUNTRY_TO_LOCALE.items(), key=lambda kv: -len(kv[0])):
+        if _country_hit(country_str):
             result["country"] = "GB" if code == "uk" else code.upper()
             result["locale"] = code
             result["currency"] = _COUNTRY_CURRENCY.get(code, "EUR")
@@ -578,7 +584,7 @@ def _parse_employment(text: str, lower: str) -> dict:
     # Gross income — match €65k, €65,000, 65k, 65000, £80k, $90k, 80.000
     amount_match = re.search(
         r'(?:[€£$]|eur|gbp|usd)?\s*'
-        r'(\d{1,3}(?:[.,]\d{3})*(?:\.\d+)?|\d+)\s*'
+        r'(\d{1,3}(?:[.,]\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*'
         r'(k|tsd\.?|thousand)?'
         r'(?:\s*(?:euro|euros|EUR|GBP|USD|CHF|PLN))?'
         r'(?:\s*/?\s*(?:year|yr|p\.a\.|pa|annual|jährlich))?',
@@ -619,7 +625,7 @@ def _parse_housing(text: str, lower: str) -> dict:
 
     # Monthly cost
     cost_match = re.search(
-        r'(?:[€£$])?\s*(\d{1,3}(?:[.,]\d{3})*|\d+)'
+        r'(?:[€£$])?\s*(\d{1,3}(?:[.,]\d{3})+|\d+)'
         r'\s*(?:[€£$])?\s*(?:/\s*(?:month|mo|monat))?',
         lower
     )
@@ -666,9 +672,14 @@ def _parse_accounts(text: str, lower: str) -> dict:
     for bank_match in bank_pattern.finditer(text):
         bank_name = bank_match.group(1)
         start = bank_match.start()
-        # Look for account type nearby (within 30 chars before/after)
-        context = text[max(0, start - 30):start + 30].lower()
-        type_m = type_pattern.search(context)
+        bank_starts = [m.start() for m in bank_pattern.finditer(text)]
+        nxt = next((b for b in bank_starts if b > start), len(text))
+        prev_end = max([m.end() for m in bank_pattern.finditer(text) if m.end() <= start], default=0)
+        # Type keyword belongs to the nearest bank: look after this bank (up to the next
+        # one), then just before it (back to the previous one)
+        type_m = type_pattern.search(text[bank_match.end():min(nxt, bank_match.end() + 30)])
+        if not type_m:
+            type_m = type_pattern.search(text[max(prev_end, start - 30):start])
         acc_type = type_m.group(1).lower() if type_m else "checking"
         # Normalize
         if acc_type in ("current", "girokonto"):
