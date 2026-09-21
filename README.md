@@ -100,6 +100,8 @@ git clone --recurse-submodules https://github.com/googlarz/finance-assistant.git
 pip install -r ~/.claude/skills/finance-assistant/requirements.txt
 ```
 
+Optional: `pip install ".[mcp]"` adds the [MCP server](docs/MCP.md) (needs Python 3.10+). After "encrypt my data" (which also covers the SQLite database), say "decrypt my data" before using the skill again.
+
 Start a new Claude Code session and ask: **"What's my financial health?"**
 
 ```bash
@@ -127,11 +129,12 @@ python3 skill.py --install     # symlinks into ~/.claude/skills/ (git pull stays
 
 A conversational copilot across the full personal-finance lifecycle. The highlights:
 
-- **Tax, law-accurate** — deductions, filing brief for your accountant, and saveable what-ifs (`W-2 vs 1099`, `single vs MFJ`, `max the 401k?`) computed from real brackets in 6 countries.
+- **Tax, law-accurate** — deductions, filing brief for your accountant, and saveable what-ifs (`W-2 vs 1099`, `single vs MFJ`, `max the 401k?`) computed from real brackets in 7 countries.
 - **Plan & project** — budgets, savings goals, debt avalanche/snowball, FIRE with 10,000-path Monte Carlo, rent-vs-buy and salary-offer comparisons.
-- **Track wealth** — portfolio allocation/XIRR, live stock + crypto prices, net-worth health score.
+- **Track wealth** — portfolio allocation/XIRR, live stock + crypto prices, net-worth health score. Import a broker trade-history CSV and get FIFO lots plus realized capital gains with a simplified tax estimate for DE/UK/IE (2025-era rules, not verified against official sources — a planning aid, not a filing figure).
 - **Import anything** — 14 bank-CSV formats on a fast path; an unrecognized file (foreign bank, scanned PDF, screenshot) is read by Claude directly, same sanitize→dedupe→confirm pipeline.
 - **Stay ahead** — every session surfaces only what needs attention: budget overspend, upcoming bills, tax deadlines, portfolio drift, zombie subscriptions ("still charging after you flagged it to cancel"), FIRE progress. Stale alerts auto-suppress. Say `hi` for a one-line proactive check-in — it picks the single most relevant thing and asks you about it.
+- **Self-maintaining ledger** — each session books due recurring transactions, refreshes budgets and snapshots, and flags money it can't explain: tell it "my DKB balance on 1 Sep was 1,234.56" and it reconciles against your transactions.
 - **Own your data** — local SQLite, encrypted backup, append-only audit log of every change, one-command total wipe.
 
 <details>
@@ -222,7 +225,7 @@ Full detail — encryption parameters, threat model, all controls, known limitat
 
 - [**Architecture**](docs/ARCHITECTURE.md) — how it works, data layout, full module reference, testing
 - [**Security**](docs/SECURITY.md) — encryption, threat model, controls
-- [**MCP server**](docs/MCP.md) — read-only tools for claude.ai desktop / any MCP client (Python 3.10+)
+- [**MCP server**](docs/MCP.md) — read tools plus a few dry-run-first write tools (import, add account/transaction, balance assertion, onboarding) for Claude Desktop / any MCP client (Python 3.10+)
 - [**Sovereignty mode**](docs/sovereignty.md) — run fully local via Ollama + accuracy harness
 - [**Contributing**](CONTRIBUTING.md) — add a locale (~7 files), plugin spec, provenance format
 
