@@ -21,8 +21,6 @@ A personal finance copilot that applies actual tax statute to your real numbers 
 
 ## See it work — real output, not a mockup
 
-<p align="center"><img src="assets/demo.svg" alt="Terminal replay of the built-in demo: net worth, German tax summary, reconciliation" width="800"></p>
-
 **FIRE confidence, with the actual distribution:**
 
 ```
@@ -99,8 +97,6 @@ Any assistant can *talk* about money. The difference is **law-accurate, bracket-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/googlarz/finance-assistant/main/install.sh | bash
 ```
-
-Or manually:
 
 **Manual** — clone straight into your skills folder (Claude Code auto-discovers it, no config to edit):
 
