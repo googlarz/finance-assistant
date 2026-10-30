@@ -7,8 +7,16 @@ This parser handles both SGML-style OFX 1.x and XML-style OFX 2.x.
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import datetime
+
+try:
+    from amount_parse import parse_amount
+except ImportError:  # pragma: no cover
+    import sys
+    sys.path.insert(0, os.path.dirname(__file__))
+    from amount_parse import parse_amount
 
 
 def parse_ofx(file_path: str) -> list[dict]:
@@ -45,17 +53,9 @@ def parse_ofx(file_path: str) -> list[dict]:
         # Parse date (YYYYMMDD or YYYYMMDDHHMMSS)
         iso_date = _parse_ofx_date(date_str)
 
-        # Parse amount. OFX spec mandates '.' as the decimal separator, but
-        # some non-compliant European exports use ',' as the decimal point
-        # instead. Stripping every comma as a thousands separator (the old
-        # behavior) silently inflated those amounts 100x — "45,60" (meaning
-        # 45.60) became 4560.0. Only treat ',' as a thousands separator when
-        # a '.' is also present (i.e. the string already looks US-style).
+        # OFX mandates '.' as the decimal, but some European exports use ','.
         try:
-            if "," in amount_str and "." not in amount_str:
-                amount = float(amount_str.replace(",", "."))
-            else:
-                amount = float(amount_str.replace(",", ""))
+            amount = parse_amount(amount_str)
         except ValueError:
             amount = 0.0
 
@@ -67,7 +67,7 @@ def parse_ofx(file_path: str) -> list[dict]:
             "description": description,
             "payee": name,
             "currency": currency,
-            "type": _map_trntype(trntype),
+            "type": _map_trntype(trntype, amount),
             "import_ref": f"ofx:{fitid}" if fitid else None,
         })
 
@@ -103,10 +103,13 @@ def _parse_ofx_date(date_str: str) -> str:
     return date_str[:10]
 
 
-def _map_trntype(trntype: str) -> str:
-    """Map OFX transaction type to our type system."""
+def _map_trntype(trntype: str, amount: float = 0.0) -> str:
+    """Map OFX transaction type to our type system. The sign decides
+    income vs expense for generic types (POS, OTHER, ...), so card refunds
+    are income; XFER rows are transfers so they stay out of income/spending."""
     trntype = trntype.upper()
-    income_types = {"CREDIT", "DEP", "DIRECTDEP", "INT", "DIV"}
-    if trntype in income_types:
+    if trntype == "XFER":
+        return "transfer"
+    if trntype in {"CREDIT", "DEP", "DIRECTDEP", "INT", "DIV"}:
         return "income"
-    return "expense"
+    return "income" if amount > 0 else "expense"

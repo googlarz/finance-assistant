@@ -13,6 +13,13 @@ import re
 from datetime import datetime
 from typing import Optional
 
+try:
+    from amount_parse import parse_amount
+except ImportError:  # pragma: no cover
+    import sys
+    sys.path.insert(0, os.path.dirname(__file__))
+    from amount_parse import parse_amount
+
 
 # ── Known bank formats ───────────────────────────────────────────────────────
 
@@ -188,6 +195,17 @@ KNOWN_FORMATS = {
 }
 
 
+def _most_specific(matches: list[str], line: str) -> str:
+    """Several formats can share their detect columns (Commerzbank's header also
+    satisfies Sparkasse's). Prefer the one whose configured data columns are all
+    present in this header, else the first match."""
+    def readable(name: str) -> bool:
+        fmt = KNOWN_FORMATS[name]
+        cols = [fmt.get(k) for k in ("date", "amount", "description", "payee")]
+        return all(c in line for c in cols if c)
+    return next((m for m in matches if readable(m)), matches[0])
+
+
 def detect_bank_format(file_path: str) -> Optional[str]:
     """Detect which bank format a CSV is from by checking headers."""
     for enc in ("utf-8", "latin-1", "cp1252"):
@@ -202,12 +220,15 @@ def detect_bank_format(file_path: str) -> Optional[str]:
 
             # Check each line for header matches
             for line in lines:
+                matches: list[str] = []
                 for bank_name, fmt in KNOWN_FORMATS.items():
                     detect_cols = fmt["detect"]
                     if not detect_cols:
                         continue  # positional formats handled separately
                     if all(col in line for col in detect_cols):
-                        return bank_name
+                        matches.append(bank_name)
+                if matches:
+                    return _most_specific(matches, line)
 
             # Check positional formats (no header row): try to parse first line
             # as MM/DD/YYYY, float, ...
@@ -450,16 +471,8 @@ def _parse_amount(value: str, decimal: str = ",") -> float:
     Strips currency symbols ($, €, £, ¥, ₹, ₽) and whitespace so YNAB-style
     "$1,234.56" and "€45,00" round-trip cleanly.
     """
-    if not value:
-        return 0.0
-    value = value.strip().strip('"')
-    value = _CURRENCY_SYMBOLS.sub("", value)
-    if decimal == ",":
-        value = value.replace(".", "").replace(",", ".")
-    else:
-        value = value.replace(",", "")
     try:
-        return float(value)
+        return parse_amount(_CURRENCY_SYMBOLS.sub("", (value or "").strip().strip('"')), decimal)
     except ValueError:
         return 0.0
 

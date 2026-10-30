@@ -1,5 +1,16 @@
 # Changelog
 
+## v4.2.2 — 2026-10-30
+
+Three import bugs reported by @mattabate (issues #9, #10, #11). Fixed by Claude Code and checked by a separate verifier agent.
+
+### Fixed
+- **German amounts of 1,000 or more imported ~1000x too small** (#10): `1.234,56` became `1.23` in generic CSV and in OFX, with no warning. The OFX half came from the 4.0.1 comma-decimal fix. CSV, OFX and broker imports now share one parser (`scripts/amount_parse.py`): when both separators appear, the last one is the decimal point.
+- **OFX refunds and incoming transfers counted as spending** (#11): the type ignored the amount's sign. A positive `POS`/`OTHER` row is now income, a negative one expense, and `XFER` rows are `transfer` so they stay out of income and spending.
+- **Commerzbank CSVs detected as Sparkasse** (#9): every row lost its description and payee. Detection now prefers the format whose configured columns are all present in the header. A new test checks that every supported format detects as itself.
+
+Full suite: 1,628 passed (was 1,617).
+
 ## v4.2.1 — 2026-10-30
 
 ### Fixed

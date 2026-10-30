@@ -13,6 +13,13 @@ import hashlib
 from datetime import datetime
 from typing import Optional
 
+try:
+    from amount_parse import parse_amount
+except ImportError:  # pragma: no cover
+    import os, sys
+    sys.path.insert(0, os.path.dirname(__file__))
+    from amount_parse import parse_amount
+
 _DATE = ("date", "trade date", "datum", "execution date", "time")
 _SYMBOL = ("symbol", "ticker", "isin", "wkn")
 _QTY = ("quantity", "shares", "units", "qty", "stück", "anzahl")
@@ -59,14 +66,7 @@ def looks_like_broker(file_path: str) -> bool:
 
 
 def _num(text: str) -> float:
-    t = str(text or "").strip().replace("€", "").replace("£", "").replace("$", "").replace(" ", "")
-    if not t:
-        return 0.0
-    if "," in t and "." in t:
-        t = t.replace(".", "").replace(",", ".") if t.rfind(",") > t.rfind(".") else t.replace(",", "")
-    elif "," in t:
-        t = t.replace(",", ".")
-    return float(t)
+    return parse_amount(text)
 
 
 def _date(text: str) -> str:
