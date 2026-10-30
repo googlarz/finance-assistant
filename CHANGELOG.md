@@ -1,5 +1,12 @@
 # Changelog
 
+## v4.2.1 — 2026-10-30
+
+### Fixed
+- **US 2026 tax rules** inherited the 2025 brackets, limits and wage base. The locales submodule now carries the real 2026 figures (IRS Rev. Proc. 2025-32, Notice 2025-67, Rev. Proc. 2025-19, SSA), contributed by @vishalhabib99 (locales PR #3). Values were re-checked against the IRS documents.
+- **US 2025 standard deduction** now reflects the OBBBA (15,750 / 31,500 / 23,625 instead of 15,000 / 30,000 / 22,500).
+- Locales submodule tagged and released as v2.6.0.
+
 ## v4.2.0 — 2026-09-21
 
 Focus: reliability (catch the bugs that hide behind `except Exception`), a faster first run, and verified tax rules.
