@@ -101,3 +101,19 @@ def test_repeated_single_separator_is_thousands_not_decimal():
     assert parse_amount("1,234,567") == 1234567.0
     assert parse_amount("1.234.567") == 1234567.0
     assert parse_amount("45,60") == 45.60  # one comma still a decimal comma
+
+
+def test_accounting_negatives():
+    assert parse_amount("(1.234,56)") == -1234.56
+    assert parse_amount("(45.60)") == -45.60
+    assert parse_amount("1.234,56-") == -1234.56
+    assert parse_amount("−5,00") == -5.0
+    assert parse_amount("-5,00") == -5.0
+
+
+def test_ofx_without_curdef_uses_the_callers_currency(tmp_path):
+    f = tmp_path / "a.ofx"
+    f.write_text("OFXHEADER:100\n<OFX><BANKTRANLIST><STMTTRN><TRNTYPE>POS<DTPOSTED>20261001"
+                 "<TRNAMT>5.00<FITID>1<NAME>X</STMTTRN></BANKTRANLIST></OFX>")
+    assert parse_ofx(str(f), currency="EUR")[0]["currency"] == "EUR"
+    assert parse_ofx(str(f))[0]["currency"] == "USD"

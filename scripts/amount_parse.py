@@ -18,7 +18,12 @@ def parse_amount(text: object, decimal: Optional[str] = None) -> float:
     With only one kind of separator, `decimal` (",", "." or None) says what it
     means; None treats "," as a decimal comma and "." as a decimal point.
     """
-    t = _NOISE.sub("", str(text or "").strip().strip('"'))
+    t = _NOISE.sub("", str(text or "").strip().strip('"')).replace("\u2212", "-")
+    negative = False
+    if t.startswith("(") and t.endswith(")"):  # accounting style: (1.234,56)
+        t, negative = t[1:-1], True
+    elif t.endswith("-") and not t.startswith("-"):  # trailing minus: 1.234,56-
+        t, negative = t[:-1], True
     if not t:
         return 0.0
     if "," in t and "." in t:
@@ -32,4 +37,5 @@ def parse_amount(text: object, decimal: Optional[str] = None) -> float:
         t = t.replace(",", "") if thousands else t.replace(",", ".")
     elif "." in t and (decimal == "," or t.count(".") > 1):
         t = t.replace(".", "")
-    return float(t)
+    value = float(t)
+    return -abs(value) if negative else value

@@ -198,7 +198,7 @@ def import_file(
         raw = parse_mt940(file_path)
     elif fmt == "ofx":
         from ofx_importer import parse_ofx
-        raw = parse_ofx(file_path)
+        raw = parse_ofx(file_path, currency=currency)
     elif fmt == "pdf":
         from pdf_importer import parse_pdf
         raw = parse_pdf(file_path, currency=currency)

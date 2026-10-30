@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Accounting-style negatives now parse everywhere amounts do: `(1.234,56)`, `1.234,56-` and the Unicode minus. Previously such a row became 0.00 (CSV) or was dropped.
+- OFX files without a `CURDEF` tag use the currency you import with instead of assuming USD.
+
+### Docs
+- README "Thanks" section crediting contributors, with a call for header lines of unlisted banks.
+
 ## v4.2.2 — 2026-10-30
 
 Three import bugs reported by @mattabate (issues #9, #10, #11). Fixed by Claude Code and checked by a separate verifier agent.

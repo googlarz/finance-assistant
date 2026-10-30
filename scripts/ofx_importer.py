@@ -19,13 +19,15 @@ except ImportError:  # pragma: no cover
     from amount_parse import parse_amount
 
 
-def parse_ofx(file_path: str) -> list[dict]:
-    """Parse an OFX/QFX file. Returns list of raw transaction dicts."""
+def parse_ofx(file_path: str, currency: str = "USD") -> list[dict]:
+    """Parse an OFX/QFX file. Returns list of raw transaction dicts.
+
+    `currency` is used only when the file has no CURDEF tag."""
     with open(file_path, "r", encoding="utf-8", errors="replace") as f:
         content = f.read()
 
     transactions = []
-    currency = _extract_tag(content, "CURDEF") or "USD"
+    currency = _extract_tag(content, "CURDEF") or currency
 
     # Find all STMTTRN blocks
     txn_blocks = re.findall(

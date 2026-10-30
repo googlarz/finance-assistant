@@ -235,6 +235,17 @@ Full detail — encryption parameters, threat model, all controls, known limitat
 - [**Sovereignty mode**](docs/sovereignty.md) — run fully local via Ollama + accuracy harness
 - [**Contributing**](CONTRIBUTING.md) — add a locale (~7 files), plugin spec, provenance format
 
+## Thanks
+
+Real users found and fixed real bugs here:
+
+- [@mattabate](https://github.com/mattabate) — German-format amounts, OFX refunds/transfers and Commerzbank detection (#9, #10, #11), each with the exact line and a repro.
+- [@vishalhabib99](https://github.com/vishalhabib99) — the US 2026 tax figures (locales PR #3).
+- [@gregario](https://github.com/gregario) — the Irish locale.
+- [@felciano](https://github.com/felciano) — import and multi-currency bug reports, and the transfer-matching design (#8).
+
+**Using a bank that isn't listed, or an export that imports wrong?** Open an issue with the header line of your CSV/OFX (amounts and names redacted) — format fixes like these are the fastest wins.
+
 **Troubleshooting:** `ModuleNotFoundError: No module named 'locales'` → you cloned without submodules; run `git submodule update --init --recursive`, then `python3 skill.py --doctor`.
 
 ---
