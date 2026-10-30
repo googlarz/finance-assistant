@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v4.2.3 — 2026-10-30
 
 ### Fixed
 - Accounting-style negatives now parse everywhere amounts do: `(1.234,56)`, `1.234,56-` and the Unicode minus. Previously such a row became 0.00 (CSV) or was dropped.
@@ -8,6 +8,8 @@
 
 ### Docs
 - README "Thanks" section crediting contributors, with a call for header lines of unlisted banks.
+
+Full suite: 1,630 passed (was 1,628).
 
 ## v4.2.2 — 2026-10-30
 
