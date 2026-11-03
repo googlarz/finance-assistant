@@ -209,51 +209,57 @@ def generate_due_transactions(as_of: Optional[str] = None) -> dict:
     generated = []
     skipped = []
     skipped_booked = []
+    errors = []
 
     for item in items:
         if item.get("status") != "active":
             continue
 
-        # Check end date
-        end = item.get("end_date")
-        if end and date.fromisoformat(end) < today:
-            continue
-
-        start = date.fromisoformat(item["start_date"])
-        if start > today:
-            continue
-
-        # Determine due dates since last generation
-        last_gen = date.fromisoformat(item["last_generated"]) if item.get("last_generated") else start - timedelta(days=1)
-        due_dates = _calculate_due_dates(item, last_gen, today)
-
-        for due_date in due_dates:
-            if _already_booked(item, due_date):
-                skipped_booked.append({"recurring_id": item["id"], "date": due_date.isoformat()})
+        # Progress is persisted per item and kept up to date inside the loop, so a
+        # failure (bad date, full disk, ...) can never make an already-booked
+        # occurrence look due again on the next run.
+        try:
+            end = item.get("end_date")
+            if end and date.fromisoformat(end) < today:
                 continue
-            txn = add_transaction(
-                date=due_date.isoformat(),
-                type=item["type"],
-                amount=item["amount"],
-                category=item["category"],
-                description=f"[recurring] {item['name']}",
-                account_id=item["account_id"],
-                currency=item["currency"],
-                is_recurring=True,
-                tags=item.get("tags", []),
-                tax_relevant=item.get("tax_relevant", False),
-            )
-            generated.append({
-                "recurring_id": item["id"],
-                "name": item["name"],
-                "date": due_date.isoformat(),
-                "amount": item["amount"],
-            })
 
-        if due_dates:
-            item["last_generated"] = max(due_dates).isoformat()
-        else:
-            skipped.append(item["id"])
+            start = date.fromisoformat(item["start_date"])
+            if start > today:
+                continue
+
+            last_gen = date.fromisoformat(item["last_generated"]) if item.get("last_generated") else start - timedelta(days=1)
+            due_dates = _calculate_due_dates(item, last_gen, today)
+
+            for due_date in sorted(due_dates):
+                if _already_booked(item, due_date):
+                    skipped_booked.append({"recurring_id": item["id"], "date": due_date.isoformat()})
+                else:
+                    add_transaction(
+                        date=due_date.isoformat(),
+                        type=item["type"],
+                        amount=item["amount"],
+                        category=item["category"],
+                        description=f"[recurring] {item['name']}",
+                        account_id=item["account_id"],
+                        currency=item["currency"],
+                        is_recurring=True,
+                        tags=item.get("tags", []),
+                        tax_relevant=item.get("tax_relevant", False),
+                    )
+                    generated.append({
+                        "recurring_id": item["id"],
+                        "name": item["name"],
+                        "date": due_date.isoformat(),
+                        "amount": item["amount"],
+                    })
+                item["last_generated"] = due_date.isoformat()
+                _save_recurrings(items)
+
+            if not due_dates:
+                skipped.append(item["id"])
+        except Exception as exc:  # one broken item must not block or re-book the others
+            errors.append({"recurring_id": item.get("id"), "name": item.get("name"),
+                           "error": f"{type(exc).__name__}: {exc}"})
 
     _save_recurrings(items)
 
@@ -263,6 +269,7 @@ def generate_due_transactions(as_of: Optional[str] = None) -> dict:
         "generated": generated,
         "skipped_count": len(skipped),
         "already_booked": skipped_booked,
+        "errors": errors,
     }
 
 
@@ -310,11 +317,15 @@ def _calculate_due_dates(item: dict, after: date, up_to: date) -> list[date]:
             current = date(year, month, 1)
 
     elif freq == "annual":
-        current = start
-        while current <= up_to:
-            if current > after and current <= up_to:
+        # Anchor on the start day every year; Feb 29 falls back to Feb 28 in non-leap years.
+        year = start.year
+        while True:
+            current = date(year, start.month, min(start.day, calendar.monthrange(year, start.month)[1]))
+            if current > up_to:
+                break
+            if current > after:
                 dates.append(current)
-            current = current.replace(year=current.year + 1)
+            year += 1
 
     elif freq in FREQUENCIES:
         interval = FREQUENCIES[freq]

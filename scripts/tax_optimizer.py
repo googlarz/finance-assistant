@@ -32,6 +32,45 @@ except ImportError:  # pragma: no cover
 
 
 # ---------------------------------------------------------------------------
+# Rules
+# ---------------------------------------------------------------------------
+
+# Used only if locales.de.tax_rules cannot be imported. Values are the 2025
+# figures; the year they belong to is FALLBACK_RULES_YEAR.
+FALLBACK_RULES_YEAR = 2025
+_FALLBACK_RULES = {
+    "arbeitnehmer_pauschbetrag": 1_230,
+    "homeoffice_tagespauschale": 6,
+    "homeoffice_max_days": 210,
+    "riester_max": 2_100,
+    "ruerup_max_single": 29_344,
+}
+
+# Statutory, not year-specific rates
+RIESTER_BASIC_ALLOWANCE = 175           # §84 EStG basic Zulage (EUR)
+CHARITABLE_CAP_FRACTION = 0.20          # §10b EStG
+LOW_EFFORT_THRESHOLD_FRACTION = 0.05
+
+# Categories that hold donations: "gifts" is the real slug ("Gifts & Donations");
+# the others are legacy/alias names.
+CHARITABLE_CATEGORIES = ("gifts", "charitable", "donation", "charity")
+
+
+def _de_rules(year: int) -> dict:
+    """German tax-year parameters for *year* (latest bundled year if newer)."""
+    try:
+        try:
+            from locales.de.tax_rules import get_tax_year_rules
+        except ImportError:  # pragma: no cover
+            import os, sys
+            sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            from locales.de.tax_rules import get_tax_year_rules
+        return {**_FALLBACK_RULES, **get_tax_year_rules(year)}
+    except Exception:  # pragma: no cover
+        return dict(_FALLBACK_RULES)
+
+
+# ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
 
@@ -92,10 +131,11 @@ def _get_ytd_data(conn: sqlite3.Connection, year: int) -> dict:
             SELECT currency, COALESCE(SUM(ABS(amount)), 0) AS total
             FROM transactions
             WHERE date LIKE ?
-              AND (LOWER(category) IN ('charitable', 'donation', 'charity'))
+              AND LOWER(category) IN ({placeholders})
+              AND type NOT IN ('transfer', 'investment', 'debt_payment')
             GROUP BY currency
-            """,
-            (year_prefix,),
+            """.format(placeholders=",".join("?" * len(CHARITABLE_CATEGORIES))),
+            (year_prefix, *CHARITABLE_CATEGORIES),
         ).fetchall()
     )
 
@@ -249,14 +289,15 @@ def get_de_opportunities(profile: dict, ytd_data: dict, year: int) -> list[dict]
     marginal = _marginal_rate_estimate(projected_income)
     months_remaining = 12 - months_elapsed
     deadline = f"December 31, {year}"
+    rules = _de_rules(year)
     tax_extra = profile.get("tax_profile", {}).get("extra", {})
     housing = profile.get("housing", {})
 
     # ------------------------------------------------------------------
     # 1. Homeoffice-Pauschale  (§4 Abs.5 EStG)  €6/day, max 210 days
     # ------------------------------------------------------------------
-    HO_MAX_DAYS = 210
-    HO_RATE = 6
+    HO_MAX_DAYS = rules["homeoffice_max_days"]
+    HO_RATE = rules["homeoffice_tagespauschale"]
     ho_days_pw = housing.get("homeoffice_days_per_week") or tax_extra.get("homeoffice_days_per_week")
     ytd_ho_days: int = ytd_data.get("ytd_homeoffice_days", 0)
 
@@ -278,8 +319,8 @@ def get_de_opportunities(profile: dict, ytd_data: dict, year: int) -> list[dict]
                     "deadline": deadline,
                     "effort": "low",
                     "detail": (
-                        "§4 Abs.5 Nr.6b EStG: up to 210 homeoffice days per year at €6/day "
-                        f"({_S()}{HO_MAX_DAYS * HO_RATE} annual cap). "
+                        f"§4 Abs.5 Nr.6b EStG: up to {HO_MAX_DAYS} homeoffice days per year at "
+                        f"{_S()}{HO_RATE}/day ({_S()}{HO_MAX_DAYS * HO_RATE} annual cap). "
                         "Keep a record of days worked from home."
                     ),
                     "confidence": "definitive",
@@ -299,15 +340,15 @@ def get_de_opportunities(profile: dict, ytd_data: dict, year: int) -> list[dict]
                     "max_deductible_amount": round(remaining_days * HO_RATE, 2),
                     "deadline": deadline,
                     "effort": "low",
-                    "detail": "§4 Abs.5 Nr.6b EStG: 210 days × €6 = €1,260 annual cap.",
+                    "detail": (f"§4 Abs.5 Nr.6b EStG: {HO_MAX_DAYS} days × {_S()}{HO_RATE} = "
+                               f"{_S()}{HO_MAX_DAYS * HO_RATE:,} annual cap."),
                     "confidence": "likely",
                 })
 
     # ------------------------------------------------------------------
     # 2. Riester  (§10a EStG)  — max €2,100/year
     # ------------------------------------------------------------------
-    RIESTER_MAX = 2_100
-    RIESTER_BASIC_ALLOWANCE = 175  # automatically deducted, reduces effective gap
+    RIESTER_MAX = rules["riester_max"]
     riester_contribution = float(tax_extra.get("riester_contribution", 0) or 0)
     has_riester = bool(tax_extra.get("riester", False))
 
@@ -335,15 +376,16 @@ def get_de_opportunities(profile: dict, ytd_data: dict, year: int) -> list[dict]
         potential_saving = RIESTER_MAX * marginal
         if potential_saving >= 50:
             opportunities.append({
-                "action": "Open a Riester-Rente and contribute up to €2,100 this year",
+                "action": f"Open a Riester-Rente and contribute up to {_S()}{RIESTER_MAX:,} this year",
                 "category": "retirement",
                 "potential_tax_saving": round(potential_saving, 2),
                 "max_deductible_amount": float(RIESTER_MAX),
                 "deadline": deadline,
                 "effort": "medium",
                 "detail": (
-                    "§10a EStG: employed taxpayers can deduct up to €2,100/year. "
-                    "State allowance (€175 basic + child allowances) reduce required own contribution."
+                    f"§10a EStG: employed taxpayers can deduct up to {_S()}{RIESTER_MAX:,}/year. "
+                    f"State allowance ({_S()}{RIESTER_BASIC_ALLOWANCE} basic + child allowances) "
+                    "reduce required own contribution."
                 ),
                 "confidence": "likely",
             })
@@ -353,7 +395,7 @@ def get_de_opportunities(profile: dict, ytd_data: dict, year: int) -> list[dict]
     # ------------------------------------------------------------------
     family_status = profile.get("family", {}).get("status", "single")
     married = family_status in ("married", "verheiratet")
-    RUERUP_MAX_SINGLE = 27_566  # 2025 baseline; exact cap varies by year
+    RUERUP_MAX_SINGLE = rules["ruerup_max_single"]
     ruerup_max = RUERUP_MAX_SINGLE * 2 if married else RUERUP_MAX_SINGLE
     ruerup_contribution = float(tax_extra.get("ruerup_contribution", 0) or 0)
     has_ruerup = bool(tax_extra.get("ruerup", False))
@@ -384,9 +426,6 @@ def get_de_opportunities(profile: dict, ytd_data: dict, year: int) -> list[dict]
     # ------------------------------------------------------------------
     # 4. Charitable donations  (§10b EStG)  — up to 20% of income
     # ------------------------------------------------------------------
-    CHARITABLE_CAP_FRACTION = 0.20
-    LOW_EFFORT_THRESHOLD_FRACTION = 0.05
-
     charitable_cap = projected_income * CHARITABLE_CAP_FRACTION
     charitable_gap = max(0.0, charitable_cap - ytd_charitable)
     if charitable_gap >= 1:
@@ -414,7 +453,7 @@ def get_de_opportunities(profile: dict, ytd_data: dict, year: int) -> list[dict]
     # ------------------------------------------------------------------
     # 5. Arbeitsmittel / work equipment  (§9 EStG)
     # ------------------------------------------------------------------
-    ARBEITNEHMER_PAUSCHBETRAG = 1_230
+    ARBEITNEHMER_PAUSCHBETRAG = rules["arbeitnehmer_pauschbetrag"]
     ytd_work_expenses = float(ytd_data.get("ytd_work_expenses", 0) or 0)
 
     if ytd_work_expenses < ARBEITNEHMER_PAUSCHBETRAG and months_remaining > 0:

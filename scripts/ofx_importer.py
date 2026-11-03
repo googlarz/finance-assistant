@@ -13,18 +13,19 @@ from datetime import datetime
 
 try:
     from amount_parse import parse_amount
+    from import_support import read_text
 except ImportError:  # pragma: no cover
     import sys
     sys.path.insert(0, os.path.dirname(__file__))
     from amount_parse import parse_amount
+    from import_support import read_text
 
 
 def parse_ofx(file_path: str, currency: str = "USD") -> list[dict]:
     """Parse an OFX/QFX file. Returns list of raw transaction dicts.
 
     `currency` is used only when the file has no CURDEF tag."""
-    with open(file_path, "r", encoding="utf-8", errors="replace") as f:
-        content = f.read()
+    content = read_text(file_path)  # BOM / UTF-16 / cp1252 aware (OFX 1.x is often CHARSET:1252)
 
     transactions = []
     currency = _extract_tag(content, "CURDEF") or currency

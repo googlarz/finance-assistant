@@ -15,11 +15,13 @@ from typing import Optional
 
 try:
     from finance_storage import ensure_subdir, get_import_log_path, load_json, save_json
+    from import_support import drop_near_duplicates, read_text
     from transaction_logger import add_transaction, deduplicate, get_transactions
 except ImportError:
     import sys
     sys.path.insert(0, os.path.dirname(__file__))
     from finance_storage import ensure_subdir, get_import_log_path, load_json, save_json
+    from import_support import drop_near_duplicates, read_text
     from transaction_logger import add_transaction, deduplicate, get_transactions
 
 
@@ -64,9 +66,7 @@ def detect_format(file_path: str) -> str:
             header_bytes = f.read(8)
         if header_bytes.startswith(b"%PDF"):
             return "pdf"
-        first_lines = header_bytes.decode("utf-8", errors="replace")
-        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
-            first_lines = f.read(2000)
+        first_lines = read_text(file_path, limit=2000)  # BOM / UTF-16 / cp1252 aware
         if "OFXHEADER" in first_lines or "<OFX>" in first_lines:
             return "ofx"
         if first_lines.startswith(":20:") or ":60F:" in first_lines:
@@ -276,6 +276,15 @@ def import_file(
     # every year that appears in the file so the in-memory dedup fallback
     # doesn't silently miss the other side. SQLite dedup path loads from all
     # years already; this matters when SQLite is unavailable.
+    from datetime import date as _date
+    def _valid_date(v):
+        try:
+            _date.fromisoformat(str(v)[:10])
+            return len(str(v)) >= 10
+        except ValueError:
+            return False
+    bad_date_rows = [t for t in normalized if not _valid_date(t.get("date"))]
+    normalized = [t for t in normalized if _valid_date(t.get("date"))]
     by_account: dict[str, list[dict]] = {}
     for txn in normalized:
         by_account.setdefault(txn.get("account_id", account_id), []).append(txn)
@@ -296,7 +305,10 @@ def import_file(
         existing: list = []
         for yr in years_in_file:
             existing.extend(get_transactions(account_id=target_account, year=yr))
-        unique.extend(deduplicate(rows, existing, account_id=target_account))
+        fresh = deduplicate(rows, existing, account_id=target_account)
+        # Same date + amount as a stored row whose description was only reworded
+        # (bank re-export, cleaned-up memo) is the same transaction.
+        unique.extend(drop_near_duplicates(fresh, existing))
 
     result = {
         "file": os.path.basename(file_path),
@@ -306,11 +318,15 @@ def import_file(
         "total_parsed": len(raw),
         "total_normalized": len(normalized),
         "duplicates_removed": len(normalized) - len(unique),
+        "skipped_bad_date": len(bad_date_rows),
         "to_import": len(unique),
         "preview": unique[:10],
         "dry_run": dry_run,
         "original_saved": original_saved,
     }
+    currencies = sorted({t.get("currency") for t in unique if t.get("currency")})
+    if len(currencies) > 1:
+        result["currencies"] = currencies  # per-row currencies (Revolut/Wise multi-currency)
     if rows_skipped:
         result["rows_skipped"] = rows_skipped
         result["skip_note"] = (

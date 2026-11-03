@@ -23,8 +23,13 @@ else
   git clone --recurse-submodules "$REPO" "$DEST"
 fi
 
+if [ -z "$(ls -A "$DEST/locales" 2>/dev/null)" ]; then
+  echo "Warning: locales/ is empty. Run: git -C \"$DEST\" submodule update --init" >&2
+fi
+
 "$PY" -m pip install --quiet -r "$DEST/requirements.txt"
 echo
 "$PY" "$DEST/skill.py" --doctor || { echo "Doctor reported problems — see above." >&2; exit 1; }
 echo
+echo 'Windows: use WSL, or run natively with: py -3 skill.py --doctor'
 echo 'Done. Start a new Claude Code session and ask: "What is my financial health?"'

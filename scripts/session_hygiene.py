@@ -15,8 +15,10 @@ def run() -> list[str]:
         r = generate_due_transactions()
         if r["generated_count"]:
             notes.append(f"Booked {r['generated_count']} recurring transaction(s) that came due.")
-    except Exception:
-        pass
+        for e in r.get("errors", []):
+            notes.append(f"Warning: recurring item {e.get('recurring_id')} could not be processed ({e.get('error')}).")
+    except Exception as exc:
+        notes.append(f"Warning: recurring transactions could not be generated ({exc}).")
 
     try:  # periodic net-worth / portfolio snapshots
         from snapshot_scheduler import check_and_snapshot

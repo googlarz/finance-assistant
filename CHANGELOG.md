@@ -1,5 +1,29 @@
 # Changelog
 
+## v4.2.4 — 2026-11-04
+
+### Fixed (regressions from 4.1.0)
+- Importing a CSV/TSV with a data row longer than its header no longer crashes the broker probe; tab delimiters are detected.
+- Recurring items are no longer re-booked every session when one item (e.g. an annual Feb-29 start) fails; Feb 29 clamps to Feb 28 in non-leap years, progress is saved per item, errors are surfaced.
+- Broker CSVs: a decimal separator is inferred per file/column, so `1.000` is no longer read as 1.0.
+- `add_transaction` rejects unparseable dates instead of silently booking them today; importers skip and count such rows (`skipped_bad_date`).
+- `tax_optimizer`: donations use the real `gifts` category, Rürup/Homeoffice/Riester/Pauschbetrag come from the locale rules for the tax year.
+
+### Added
+- 24 bank formats: UK (Monzo, Starling, Barclays, HSBC, Lloyds/Halifax, Santander, Nationwide), IE (AIB, Bank of Ireland), PL (PKO BP, mBank, ING, Santander), NL (ING, ABN AMRO, Rabobank, bunq), FR (BNP, Boursorama, Crédit Agricole), DKB 2023, Sparkasse CAMT. Headers marked `# unverified header` need confirmation from real exports.
+- BOM / UTF-16 / cp1252 / latin-1 decoding; separate debit/credit columns; one date order per file; per-row currency for Revolut/Wise; near-duplicate detection for reworded descriptions.
+- `--export csv|xlsx|capital-gains`, `--tax-outlook`, `--capital-gains`; SKILL.md documents `--tax-brief` and the what-if API.
+- `FINANCE_PASSPHRASE` environment variable for encryption.
+
+### Security / trust
+- "Encrypt my data" now covers all JSON data (audit access log, budgets, wealth snapshots), not only the database; `delete_all_data` also removes rotated audit logs.
+- `--doctor` checks `cryptography`, `requests` and the locales submodule; installer warns about both.
+
+### License
+- LICENSE is now MIT, matching `pyproject.toml` (it previously said CC BY 4.0).
+
+Full suite: 1,722 passed (was 1,630).
+
 ## v4.2.3 — 2026-10-30
 
 ### Fixed

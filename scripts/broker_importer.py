@@ -14,11 +14,11 @@ from datetime import datetime
 from typing import Optional
 
 try:
-    from amount_parse import parse_amount
+    from amount_parse import parse_amount, infer_decimal
 except ImportError:  # pragma: no cover
     import os, sys
     sys.path.insert(0, os.path.dirname(__file__))
-    from amount_parse import parse_amount
+    from amount_parse import parse_amount, infer_decimal
 
 _DATE = ("date", "trade date", "datum", "execution date", "time")
 _SYMBOL = ("symbol", "ticker", "isin", "wkn")
@@ -38,12 +38,21 @@ def _pick(headers: list[str], names: tuple) -> Optional[str]:
     return None
 
 
-def _read(file_path: str) -> tuple[list[str], list[dict]]:
+def _read(file_path: str) -> tuple[list[str], list[dict], str]:
     with open(file_path, newline="", encoding="utf-8-sig", errors="replace") as f:
         text = f.read()
-    delim = ";" if text[:500].count(";") > text[:500].count(",") else ","
-    rows = list(csv.DictReader(text.splitlines(), delimiter=delim))
-    return list(rows[0].keys()) if rows else [], rows
+    lines = text.splitlines()
+    head = lines[0] if lines else ""
+    delim = max((",", ";", "\t"), key=lambda d: head.count(d))  # ties -> ","
+    reader = csv.DictReader(lines, delimiter=delim)
+    headers = [h for h in (reader.fieldnames or []) if isinstance(h, str)]
+    rows = []
+    for raw in reader:
+        # Rows longer than the header put the surplus under a None key (as a
+        # list); shorter rows leave None values. Keep only str -> str cells.
+        rows.append({k: (v if isinstance(v, str) else "") for k, v in raw.items()
+                     if isinstance(k, str)})
+    return headers, rows, delim
 
 
 def _columns(headers: list[str]) -> Optional[dict]:
@@ -55,7 +64,7 @@ def _columns(headers: list[str]) -> Optional[dict]:
 
 def looks_like_broker(file_path: str) -> bool:
     try:
-        headers, rows = _read(file_path)
+        headers, rows, _ = _read(file_path)
     except Exception:
         return False
     cols = _columns(headers)
@@ -65,8 +74,8 @@ def looks_like_broker(file_path: str) -> bool:
     return any(any(w in s for w in _BUY + _SELL) for s in sides)
 
 
-def _num(text: str) -> float:
-    return parse_amount(text)
+def _num(text: str, decimal: Optional[str] = None) -> float:
+    return parse_amount(text, decimal)
 
 
 def _date(text: str) -> str:
@@ -79,9 +88,23 @@ def _date(text: str) -> str:
     raise ValueError(f"unrecognised date {text!r}")
 
 
+def _column_decimals(rows: list[dict], cols: dict, delim: str) -> dict:
+    """Decimal separator per numeric column: the column's own evidence, else the
+    whole file's, else the delimiter's convention (";" files are German-style
+    decimal commas, everything else decimal points)."""
+    keys = [k for k in ("qty", "price", "fees") if cols.get(k)]
+    values = {k: [r.get(cols[k], "") for r in rows] for k in keys}
+    file_wide = infer_decimal([v for vs in values.values() for v in vs])
+    default = "," if delim == ";" else "."
+    return {k: infer_decimal(values[k]) or file_wide or default for k in keys}
+
+
 def parse_broker_csv(file_path: str, currency: str = "EUR") -> tuple[list[dict], list[str]]:
-    headers, rows = _read(file_path)
+    headers, rows, delim = _read(file_path)
     cols = _columns(headers)
+    if not cols:
+        return [], ["not a recognised broker trade file (need date, symbol, quantity, price, side columns)"]
+    dec = _column_decimals(rows, cols, delim)
     trades, skipped = [], []
     for i, r in enumerate(rows, start=2):
         side_raw = str(r.get(cols["side"], "")).strip().lower()
@@ -90,13 +113,16 @@ def parse_broker_csv(file_path: str, currency: str = "EUR") -> tuple[list[dict],
             skipped.append(f"row {i}: not a buy/sell ({side_raw!r})")
             continue
         try:
+            quantity = abs(_num(r[cols["qty"]], dec["qty"]))
+            if not quantity:  # empty/zero cell, e.g. a row cut short
+                raise ValueError("missing quantity")
             trades.append({
                 "date": _date(r[cols["date"]]),
                 "symbol": str(r[cols["symbol"]]).strip().upper(),
                 "side": side,
-                "quantity": abs(_num(r[cols["qty"]])),
-                "price": abs(_num(r[cols["price"]])),
-                "fees": abs(_num(r.get(cols["fees"], 0))) if cols["fees"] else 0.0,
+                "quantity": quantity,
+                "price": abs(_num(r[cols["price"]], dec["price"])),
+                "fees": abs(_num(r.get(cols["fees"], 0), dec["fees"])) if cols["fees"] else 0.0,
                 "currency": (str(r.get(cols["currency"]) or "").strip().upper() or currency) if cols["currency"] else currency,
             })
         except (ValueError, KeyError) as exc:

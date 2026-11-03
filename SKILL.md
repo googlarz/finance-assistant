@@ -232,6 +232,12 @@ If the user is privacy-motivated (raises it, or asks where data goes), be precis
 - `restore my backup` → `python3 skill.py --backup-restore` (refuses to overwrite in place)
 - `show the audit log` / `what changed today` → `audit_log.read_recent()` / `format_audit()` — before/after values for every mutation
 - `check in on me automatically` / `set up a weekly digest` → `python3 skill.py --setup-digest` (launchd, macOS-only — sends an OS notification, no Claude session required); tell the user plainly if they're not on macOS this path isn't available yet
+- `export my transactions` / `give me a CSV (or Excel) of my spending` → `python3 skill.py --export csv|xlsx [--year N] [--account ID] [--out PATH]` (CSV opens in Excel; xlsx needs the optional `openpyxl`; existing files are never overwritten)
+- `export my capital gains` → `python3 skill.py --export capital-gains --year N`
+- `what are my capital gains` / `did I sell at a profit` → `python3 skill.py --capital-gains [--year N]` (FIFO + simplified de/uk/ie estimate; planning aid, not a filing figure)
+- `how can I lower my tax this year` / `year-end tax moves` → `python3 skill.py --tax-outlook [--year N]` (`tax_optimizer.get_tax_action_summary`)
+- `prepare my tax brief` / `brief for my accountant` → `python3 skill.py --tax-brief [--year N]`
+- After a FIRE, debt-payoff, rent-vs-buy or savings-goal scenario, offer follow-ups with `whatif_engine.generate_variants(type, inputs, result)` + `format_variants(...)`; run the chosen one with `apply_variant(...)` (Python API, no CLI flag)
 - `watch my inbox folder` → `python3 skill.py --setup-watcher` — auto-processes files dropped into `.finance/inbox/`
 - `undo that import` / `that import was wrong` → `transaction_logger.delete_import(import_ref)` — the last import's result carries `import_ref`
 - `delete that transaction` → `transaction_logger.delete_transaction(account_id, txn_id)`
@@ -387,6 +393,10 @@ Finance Assistant can be used directly from the terminal without Claude:
 | `python3 skill.py --household` | Shared household expense summary |
 | `python3 skill.py --debt-strategy [--extra N]` | Avalanche vs snowball payoff comparison |
 | `python3 skill.py --locale-stats` | Locale usage telemetry |
+| `python3 skill.py --export csv\|xlsx\|capital-gains [--year N] [--account ID] [--out PATH]` | Export transactions or realized gains; never overwrites |
+| `python3 skill.py --tax-outlook [--year N]` | Year-end tax projection and top actions |
+| `python3 skill.py --capital-gains [--year N]` | Realized gains and tax estimate |
+| `python3 skill.py --tax-brief [--year N]` | Filing brief for your accountant |
 
 The `--demo` and `--dashboard` flags open an HTML file — open it in any browser. No server required. This table covers the flags most useful in conversation; run `python3 skill.py --help` for the complete list.
 

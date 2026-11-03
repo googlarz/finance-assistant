@@ -30,4 +30,4 @@ Limits, stated plainly:
 
 I would most like feedback on the locale plugin format (adding a country is meant to be a ~7-file contribution) and on where the tax engines disagree with your own return.
 
-License CC BY 4.0.
+License MIT.

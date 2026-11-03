@@ -27,7 +27,7 @@ git clone --recurse-submodules https://github.com/googlarz/finance-assistant.git
 Verify: `python3 ~/.claude/skills/finance-assistant/skill.py --doctor`. Try: `python3 ~/.claude/skills/finance-assistant/skill.py --demo`.
 
 ## Repo / license
-https://github.com/googlarz/finance-assistant , CC BY 4.0. Version 4.1.0 (4.2.0 in progress).
+https://github.com/googlarz/finance-assistant , MIT. Version 4.1.0 (4.2.0 in progress).
 
 ## Screenshots / media to attach
 1. `assets/demo.svg` (animated terminal replay; check the directory accepts SVG, else record a GIF)

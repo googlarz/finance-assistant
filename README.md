@@ -1,7 +1,7 @@
 # Finance Assistant
 
-[![version](https://img.shields.io/badge/version-4.2.3-blue)](https://github.com/googlarz/finance-assistant/releases)
-[![tests](https://img.shields.io/badge/tests-1%2C630%20passing-brightgreen)](docs/ARCHITECTURE.md#testing)
+[![version](https://img.shields.io/badge/version-4.2.4-blue)](https://github.com/googlarz/finance-assistant/releases)
+[![tests](https://img.shields.io/badge/tests-1%2C722%20passing-brightgreen)](docs/ARCHITECTURE.md#testing)
 [![tax cases](https://img.shields.io/badge/tax%20law-39%20official%20cases-success)](#locales--validation)
 [![locales](https://img.shields.io/badge/locales-DE·UK·US·FR·NL·PL·IE-orange)](#locales--validation)
 [![local-first](https://img.shields.io/badge/local--first-no%20cloud-black)](docs/SECURITY.md)
@@ -250,6 +250,6 @@ Real users found and fixed real bugs here:
 
 ---
 
-Open source under [CC BY 4.0](LICENSE). Built on real statute, tested against official numbers, run on your own machine.
+Open source under [MIT](LICENSE). Built on real statute, tested against official numbers, run on your own machine.
 
 ![Finance Assistant Dashboard](assets/dashboard-preview.jpg)

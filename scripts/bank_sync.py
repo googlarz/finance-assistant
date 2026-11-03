@@ -546,18 +546,22 @@ def sync_account(
         txn_type = "income" if amount > 0 else "expense"
         description = txn["description"] or txn.get("creditor_name") or txn.get("debtor_name") or "Bank transaction"
 
-        add_transaction(
-            date=txn["date"],
-            type=txn_type,
-            amount=abs(amount),
-            category="other_income" if txn_type == "income" else "other_expense",
-            description=description,
-            account_id=fa_account_id,
-            currency=txn.get("currency", "EUR"),
-            import_source="gocardless",
-            import_ref=txn_id,
-            payee=txn.get("creditor_name") or txn.get("debtor_name") or "",
-        )
+        try:
+            add_transaction(
+                date=txn["date"],
+                type=txn_type,
+                amount=abs(amount),
+                category="other_income" if txn_type == "income" else "other_expense",
+                description=description,
+                account_id=fa_account_id,
+                currency=txn.get("currency", "EUR"),
+                import_source="gocardless",
+                import_ref=txn_id,
+                payee=txn.get("creditor_name") or txn.get("debtor_name") or "",
+            )
+        except ValueError:
+            skipped += 1
+            continue
         seen_ids.add(txn_id)
         new_count += 1
 

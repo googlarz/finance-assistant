@@ -11,11 +11,15 @@ import sys
 
 
 def _check_python_version() -> dict:
+    if sys.version_info < (3, 9):
+        return {"name": "Python version", "status": "fail",
+                "message": f"{sys.version.split()[0]} - the skill needs Python 3.9+"}
     ok = sys.version_info >= (3, 10)
     return {
         "name": "Python version",
         "status": "ok" if ok else "warn",
-        "message": f"{sys.version.split()[0]}" + ("" if ok else " (works for the skill; the optional MCP server needs 3.10+)"),
+        "message": f"{sys.version.split()[0]} (skill needs 3.9+, MCP server needs 3.10+)"
+        + ("" if ok else " - the skill works, but the optional MCP server will not run"),
     }
 
 
@@ -73,12 +77,12 @@ def _check_locales_submodule() -> dict:
     locales_dir = os.path.normpath(locales_dir)
     # Submodule is uninitialised if the directory exists but is empty (no __init__.py or de/)
     if not os.path.isdir(locales_dir):
-        return {"name": "Locales submodule", "status": "fail",
-                "message": "locales/ directory missing. Run: git submodule update --init --recursive"}
+        return {"name": "Locales submodule", "status": "warn",
+                "message": "locales/ directory missing. Run: git submodule update --init"}
     has_content = any(os.scandir(locales_dir))
     if not has_content:
-        return {"name": "Locales submodule", "status": "fail",
-                "message": "locales/ is empty (submodule not initialised). Run: git submodule update --init --recursive"}
+        return {"name": "Locales submodule", "status": "warn",
+                "message": "locales/ is empty (submodule not initialised). Run: git submodule update --init"}
     return {"name": "Locales submodule", "status": "ok", "message": f"Initialised ({locales_dir})"}
 
 
@@ -102,8 +106,20 @@ def _check_cryptography() -> dict:
     except ImportError:
         return {
             "name": "Encryption (cryptography)",
-            "status": "fail",
-            "message": "Missing: pip install cryptography — required for data encryption/decryption",
+            "status": "warn",
+            "message": "Optional, not installed - needed only for 'encrypt my data'. Install: pip install cryptography",
+        }
+
+
+def _check_requests() -> dict:
+    try:
+        import requests  # noqa: F401
+        return {"name": "Network (requests)", "status": "ok", "message": "requests package available"}
+    except ImportError:
+        return {
+            "name": "Network (requests)",
+            "status": "warn",
+            "message": "Optional, not installed - needed for price/FX/bank sync. Install: pip install requests",
         }
 
 
@@ -129,6 +145,7 @@ def run_checks() -> list:
         _check_python_version(),
         _check_requirements(),
         _check_cryptography(),
+        _check_requests(),
         _check_finance_dir(),
         _check_locales_submodule(),
         _check_db(),

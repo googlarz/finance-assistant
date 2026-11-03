@@ -229,13 +229,12 @@ def add_transaction(
     **kwargs,
 ) -> dict:
     """Add a transaction. Returns the new transaction plus updated totals."""
-    # Normalize date
+    # Validate date: a wrong date silently becoming "today" would corrupt the
+    # ledger, so reject it and let callers skip-and-count the row.
     try:
-        parsed = datetime.fromisoformat(date)
-        year = parsed.year
+        year = datetime.fromisoformat(date).year
     except (ValueError, TypeError):
-        date = datetime.now().date().isoformat()
-        year = datetime.now().year
+        raise ValueError(f"Invalid transaction date {date!r}: expected ISO format YYYY-MM-DD")
 
     # Auto-categorize if category is unknown
     if category not in ALL_CATEGORIES:

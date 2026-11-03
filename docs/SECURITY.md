@@ -100,6 +100,16 @@ The privacy statement is shown once:
 
 By default Claude Code sends your prompts and file context to Anthropic's API — your **data on disk** never leaves your machine, but the **conversation** does. For fully local operation (confidential client data, sovereignty policies), route Claude Code through a local model. See [`sovereignty.md`](sovereignty.md) for the recipe and an accuracy harness that measures the tradeoff on your own hardware.
 
+## Passphrase handling
+
+Do not type your encryption passphrase into the chat: everything you type ends up in the Claude Code session transcript on disk (and is sent to the model API). Set it in your shell instead, before starting Claude Code:
+
+```bash
+export FINANCE_PASSPHRASE='your long passphrase'
+```
+
+`encrypt_sensitive_files()` and `decrypt_sensitive_files()` read `FINANCE_PASSPHRASE` when no passphrase argument is given. A CLI prompt (`getpass`) works too.
+
 ## Network calls (opt-in)
 
 | Host | Triggered by | What is sent | What comes back |
@@ -114,9 +124,9 @@ Nothing else opens a socket. Verify: `grep -rn "urlopen\|requests\." scripts/`.
 
 ## Where data lives on disk
 
-- `.finance/` — profile, accounts, transactions (JSON + `finance.db`), budgets, goals, and `originals/` (copies of statements you imported; skipped with `keep_original=False`). "Encrypt my data" covers the JSON files, `finance.db`, `originals/`, and the GoCardless token cache; decrypt before using the skill again.
+- `.finance/` — profile, accounts, transactions (JSON + `finance.db`), budgets, goals, and `originals/` (copies of statements you imported; skipped with `keep_original=False`). "Encrypt my data" covers every JSON file (including `audit/access_log.json`, budgets and net-worth snapshots), `finance.db`, `originals/`, and the GoCardless token cache; decrypt before using the skill again.
 - `.finance/bank_sync/credentials.enc` — GoCardless credentials, always encrypted. `token_cache.json` holds only the short-lived (~24 h) access token.
-- `~/.finance/audit.log` — change log with amounts and descriptions. Lives in your home directory (not the project), is plaintext (chmod 600), and is deleted by `delete_all_data`.
+- `~/.finance/audit.log` — change log with amounts and descriptions. Lives in your home directory (not the project), is plaintext (chmod 600), and is deleted by `delete_all_data` together with rotated copies (`audit.log.1`, ...).
 
 ## Known Limitations
 

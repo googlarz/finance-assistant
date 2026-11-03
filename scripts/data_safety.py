@@ -225,7 +225,10 @@ def delete_all_data(confirm: bool = False) -> dict:
     finance_dir = get_finance_dir()
     try:  # ~/.finance/audit.log lives outside .finance/ but holds amounts + descriptions
         import audit_log
-        Path(audit_log._AUDIT_PATH).unlink(missing_ok=True)
+        audit_path = Path(audit_log._AUDIT_PATH)
+        audit_path.unlink(missing_ok=True)
+        for rotated in audit_path.parent.glob(audit_path.name + ".*"):  # audit.log.1, ...
+            rotated.unlink(missing_ok=True)
     except Exception:
         pass
     if finance_dir.exists():
@@ -421,7 +424,7 @@ def encrypt_file(file_path: str, passphrase: str) -> str:
     try:
         with open(path) as f:
             existing = json.load(f)
-        if existing.get("_encrypted") == "fernet":
+        if isinstance(existing, dict) and existing.get("_encrypted") == "fernet":
             return str(path)  # Already encrypted
     except (json.JSONDecodeError, UnicodeDecodeError):
         pass
@@ -466,7 +469,7 @@ def decrypt_file(file_path: str, passphrase: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
         content = json.load(f)
 
-    if content.get("_encrypted") != "fernet":
+    if not isinstance(content, dict) or content.get("_encrypted") != "fernet":
         return str(path)  # Not encrypted or different scheme
 
     salt = _b64.b64decode(content["salt"])
@@ -553,10 +556,61 @@ def _blob_targets(finance_dir: Path) -> list[Path]:
     return [p for p in targets if p.is_file()]
 
 
-def encrypt_sensitive_files(passphrase: str) -> dict:
+PASSPHRASE_ENV = "FINANCE_PASSPHRASE"
+
+
+def resolve_passphrase(passphrase: Optional[str] = None) -> str:
+    """Explicit passphrase wins; otherwise read FINANCE_PASSPHRASE from the environment.
+    Keeps the secret out of chat (and therefore out of the session transcript)."""
+    value = passphrase or os.environ.get(PASSPHRASE_ENV)
+    if not value:
+        raise ValueError(f"No passphrase given. Set {PASSPHRASE_ENV} in your shell environment.")
+    return value
+
+
+def _is_json_encrypted(path: Path) -> bool:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):  # JSONDecodeError and UnicodeDecodeError are ValueErrors
+        return False
+    return isinstance(data, dict) and data.get("_encrypted") == "fernet"
+
+
+def _json_targets(finance_dir: Path) -> list:
+    """Every persisted JSON data file (profile, accounts, budgets, net worth
+    snapshots, audit/access_log.json, ...). Atomic-write temp files are skipped."""
+    return sorted(
+        p for p in finance_dir.rglob("*.json")
+        if p.is_file() and not p.name.endswith((".tmp", ".enc.tmp", ".dec.tmp"))
+    )
+
+
+def get_encryption_status() -> dict:
+    """Count encrypted vs plaintext data files so every caller reports the same state."""
+    finance_dir = get_finance_dir()
+    if not finance_dir.exists():
+        return {"status": "no_data", "encrypted": 0, "plaintext": 0, "plaintext_files": []}
+    enc, plain = 0, []
+    for p in _json_targets(finance_dir):
+        if _is_json_encrypted(p):
+            enc += 1
+        else:
+            plain.append(str(p.relative_to(finance_dir)))
+    for p in _blob_targets(finance_dir):
+        if is_blob_encrypted(p):
+            enc += 1
+        else:
+            plain.append(str(p.relative_to(finance_dir)))
+    status = "plaintext" if not enc else ("encrypted" if not plain else "partial")
+    return {"status": status, "encrypted": enc, "plaintext": len(plain), "plaintext_files": plain}
+
+
+def encrypt_sensitive_files(passphrase: Optional[str] = None) -> dict:
     """
-    Encrypt sensitive financial data files using Fernet AES encryption.
-    Covers profile, accounts, transactions, investments, and debt files.
+    Encrypt all persisted financial data with Fernet AES: every JSON file under
+    .finance/ (including audit/access_log.json, budgets, net-worth snapshots),
+    finance.db and originals/. Passphrase may come from FINANCE_PASSPHRASE.
     Also hardens file permissions to 600 after encryption.
     """
     if not _CRYPTO_AVAILABLE:
@@ -565,28 +619,21 @@ def encrypt_sensitive_files(passphrase: str) -> dict:
             "fix": "pip install cryptography",
         }
 
+    passphrase = resolve_passphrase(passphrase)
+    _check_passphrase_strength(passphrase)
     finance_dir = get_finance_dir()
     encrypted_files = []
 
-    # All files containing personal financial data
-    sensitive_patterns = [
-        "finance_profile.json",
-        "accounts/accounts.json",
-        "accounts/transactions/*.json",
-        "investments/portfolio.json",
-        "debt/debts.json",
-        "goals/goals.json",
-        "insurance/policies.json",
-        "taxes/**/*.json",
-        "bank_sync/token_cache.json",
-    ]
+    # Log and harden first: the access log is itself encrypted below and can no
+    # longer be appended to afterwards.
+    harden_permissions()
+    _log_access("encrypt", "Encrypting all data files")
 
-    for pattern in sensitive_patterns:
-        for path in finance_dir.glob(pattern):
-            if not path.is_file():
-                continue
-            encrypt_file(str(path), passphrase)
-            encrypted_files.append(str(path.relative_to(finance_dir)))
+    for path in _json_targets(finance_dir):
+        if _is_json_encrypted(path):
+            continue
+        encrypt_file(str(path), passphrase)
+        encrypted_files.append(str(path.relative_to(finance_dir)))
 
     # finance.db + originals/ used to stay plaintext next to encrypted JSON, and
     # engines kept answering from the unencrypted DB.
@@ -605,25 +652,19 @@ def encrypt_sensitive_files(passphrase: str) -> dict:
     for sidecar in ("finance.db-wal", "finance.db-shm"):
         (finance_dir / sidecar).unlink(missing_ok=True)
 
-    harden_permissions()  # Secure file system permissions too
-    _log_access("encrypt", f"Encrypted {len(encrypted_files)} files")
     return {"encrypted_count": len(encrypted_files), "files": encrypted_files}
 
 
-def decrypt_sensitive_files(passphrase: str) -> dict:
-    """Decrypt all encrypted data files."""
+def decrypt_sensitive_files(passphrase: Optional[str] = None) -> dict:
+    """Decrypt all encrypted data files. Passphrase may come from FINANCE_PASSPHRASE."""
+    passphrase = resolve_passphrase(passphrase)
     finance_dir = get_finance_dir()
     decrypted_files = []
 
-    for path in finance_dir.rglob("*.json"):
-        try:
-            with open(path) as f:
-                data = json.load(f)
-            if data.get("_encrypted"):
-                decrypt_file(str(path), passphrase)
-                decrypted_files.append(str(path.relative_to(finance_dir)))
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            continue
+    for path in _json_targets(finance_dir):
+        if _is_json_encrypted(path):
+            decrypt_file(str(path), passphrase)
+            decrypted_files.append(str(path.relative_to(finance_dir)))
 
     for target in _blob_targets(finance_dir):
         if is_blob_encrypted(target):
@@ -674,6 +715,8 @@ def sanitize_for_sharing(data: dict) -> dict:
 def _log_access(action: str, detail: str) -> None:
     """Log data access for audit purposes."""
     log_path = ensure_subdir("audit") / "access_log.json"
+    if log_path.exists() and _is_json_encrypted(log_path):
+        return  # encrypted at rest; decrypt first to append
     log = load_json(log_path, default={"entries": []})
     log["entries"].append({
         "timestamp": datetime.now().isoformat(),
@@ -688,6 +731,8 @@ def _log_access(action: str, detail: str) -> None:
 def get_access_log(limit: int = 50) -> list[dict]:
     """Return recent access log entries."""
     log_path = ensure_subdir("audit") / "access_log.json"
+    if log_path.exists() and _is_json_encrypted(log_path):
+        return []  # encrypted at rest
     log = load_json(log_path, default={"entries": []})
     return log.get("entries", [])[-limit:]
 
@@ -700,6 +745,14 @@ def get_privacy_summary() -> str:
     perm_check = check_permissions()
     enc_available = "yes (AES-128-CBC + HMAC-SHA256)" if _CRYPTO_AVAILABLE else "no — run: pip install cryptography"
 
+    enc_state = get_encryption_status()
+    enc_line = {
+        "no_data": "no data yet",
+        "plaintext": "not encrypted (say 'encrypt my data')",
+        "encrypted": f"all {enc_state['encrypted']} data files encrypted",
+        "partial": f"PARTIAL: {enc_state['encrypted']} encrypted, {enc_state['plaintext']} still plaintext",
+    }[enc_state["status"]]
+
     lines = [
         "═══ Data Safety Summary ═══\n",
         "Where your data lives:",
@@ -707,7 +760,8 @@ def get_privacy_summary() -> str:
         f"  Files: {inventory.get('total_files', 0)}",
         f"  Size: {inventory.get('total_size_human', '0 B')}",
         f"  File permissions: {perm_check['status']}",
-        f"  Encryption available: {enc_available}\n",
+        f"  Encryption available: {enc_available}",
+        f"  Encryption state: {enc_line}\n",
         "What we NEVER store:",
         "  - Bank login credentials, passwords, PINs, TANs",
         "  - Full IBAN or credit card numbers",

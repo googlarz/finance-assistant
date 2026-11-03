@@ -17,7 +17,7 @@ from onboarding import (
     get_resume_message, get_completion_message, get_onboarding_state,
 )
 
-__version__ = "4.2.3"
+__version__ = "4.2.4"
 
 _timeline_ctx: dict = {}
 
@@ -475,6 +475,10 @@ Tax
   --tax-compare {filing-status|employment-type|pretax} --gross N [--year Y]
                         [--contribution C] [--save NAME]   Saveable tax what-ifs
   --tax-brief [--year Y]                                   Filing brief for your accountant
+  --tax-outlook [--year Y]          Year-end tax projection and top savings actions
+  --capital-gains [--year Y]        Realized gains (FIFO) and tax estimate
+  --export {csv|xlsx|capital-gains} [--year Y] [--account ID] [--out PATH]
+                                    Export transactions or gains (never overwrites)
   --locale-stats                                           Which locales you've used
 
 Money
@@ -653,6 +657,66 @@ if __name__ == "__main__":
         else:
             print(f"Exchange rate sync failed: {result.get('error')}", file=sys.stderr)
             sys.exit(1)
+        sys.exit(0)
+
+    if "--export" in sys.argv:
+        _setup_db()
+        from export_data import run_export
+        _a = sys.argv
+
+        def _opt(flag, cast=str):
+            if flag in _a and _a.index(flag) + 1 < len(_a):
+                try:
+                    return cast(_a[_a.index(flag) + 1])
+                except ValueError:
+                    return None
+            return None
+
+        kind = _opt("--export")
+        if kind is None:
+            print("Usage: --export {csv|xlsx|capital-gains} [--year N] [--account ID] [--out PATH]",
+                  file=sys.stderr)
+            sys.exit(1)
+        res = run_export(kind, _opt("--year", int), _opt("--account"), _opt("--out"))
+        if "error" in res:
+            print(res["error"], file=sys.stderr)
+            sys.exit(1)
+        print(f"Exported {res['rows']} row(s) to: {res['path']}")
+        sys.exit(0)
+
+    if "--tax-outlook" in sys.argv:
+        _setup_db()
+        from tax_optimizer import get_tax_action_summary
+        _y = None
+        if "--year" in sys.argv and sys.argv.index("--year") + 1 < len(sys.argv):
+            try:
+                _y = int(sys.argv[sys.argv.index("--year") + 1])
+            except ValueError:
+                pass
+        print(get_tax_action_summary(get_profile() or {}, _y))
+        sys.exit(0)
+
+    if "--capital-gains" in sys.argv:
+        _setup_db()
+        from capital_gains import estimate_tax
+        from datetime import datetime as _dt
+        _y = _dt.now().year
+        if "--year" in sys.argv and sys.argv.index("--year") + 1 < len(sys.argv):
+            try:
+                _y = int(sys.argv[sys.argv.index("--year") + 1])
+            except ValueError:
+                pass
+        r = estimate_tax(_y)
+        print(f"Capital gains {r['year']} ({r['locale']}): {len(r['disposals'])} disposal(s), "
+              f"net {r['net_gain']:,.2f} {r['currency']}")
+        for d in r["disposals"]:
+            print(f"  {d['sell_date']} {d['symbol']} x{d['quantity']}: "
+                  f"proceeds {d['proceeds']:,.2f}, cost {d['cost']:,.2f}, gain {d['gain']:,.2f}")
+        if r["tax"] is not None:
+            print(f"Estimated tax: {r['tax']:,.2f} {r['currency']}")
+        for a in r["assumptions"]:
+            print(f"  - {a}")
+        print("Planning aid, not a filing figure.")
         sys.exit(0)
 
     if "--tax-brief" in sys.argv:

@@ -8,6 +8,7 @@ Falls back to generic column-position-based parsing.
 from __future__ import annotations
 
 import csv
+import io
 import os
 import re
 from datetime import datetime
@@ -15,10 +16,12 @@ from typing import Optional
 
 try:
     from amount_parse import parse_amount
+    from import_support import read_text
 except ImportError:  # pragma: no cover
     import sys
     sys.path.insert(0, os.path.dirname(__file__))
     from amount_parse import parse_amount
+    from import_support import read_text
 
 
 # ── Known bank formats ───────────────────────────────────────────────────────
@@ -78,6 +81,7 @@ KNOWN_FORMATS = {
         "delimiter": ",",
         "encoding": "utf-8",
         "decimal": ".",
+        "currency_col": "Currency",   # multi-currency statements: honor it per row
     },
     "revolut": {
         "detect": ["Type", "Started Date", "Amount"],
@@ -89,6 +93,7 @@ KNOWN_FORMATS = {
         "delimiter": ",",
         "encoding": "utf-8",
         "decimal": ".",
+        "currency_col": "Currency",   # multi-currency statements: honor it per row
     },
     "commerzbank": {
         "detect": ["Buchungstag", "Wertstellung", "Umsatzart"],
@@ -192,60 +197,349 @@ KNOWN_FORMATS = {
         "decimal": ".",
         "amount_sign": "split_cols",  # separate Debit/Credit columns
     },
+
+    # ── Germany (newer exports) ──────────────────────────────────────────────
+    "dkb_2023": {  # DKB CSV since 2023: metadata block, then this header, UTF-8, 2-digit year
+        "detect": ["Buchungsdatum", "Wertstellung", "Umsatztyp", "Betrag (€)"],
+        "date": "Buchungsdatum",
+        "amount": "Betrag (€)",
+        "description": "Verwendungszweck",
+        "payee": "Zahlungsempfänger*in",        # outgoing rows: the recipient
+        "payee_credit": "Zahlungspflichtige*r",  # incoming rows: the payer
+        "date_format": "%d.%m.%y",
+        "delimiter": ";",
+        "encoding": "utf-8",
+        "decimal": ",",
+    },
+    "sparkasse_camt": {  # Sparkasse "CSV-CAMT" export
+        "detect": ["Auftragskonto", "Buchungstag", "Valutadatum", "Waehrung"],
+        "date": "Buchungstag",
+        "amount": "Betrag",
+        "description": "Verwendungszweck",
+        "payee": "Beguenstigter/Zahlungspflichtiger",
+        "date_format": "%d.%m.%y",
+        "delimiter": ";",
+        "encoding": "cp1252",
+        "decimal": ",",
+        "currency_col": "Waehrung",
+    },
+
+    # ── United Kingdom (dates are dd/mm/yyyy; many files are cp1252 for the £ sign) ──
+    "monzo": {
+        "detect": ["Transaction ID", "Local amount", "Notes and #tags"],
+        "date": "Date",
+        "amount": "Amount",
+        "description": "Description",
+        "payee": "Name",
+        "date_format": "%d/%m/%Y",
+        "delimiter": ",",
+        "encoding": "utf-8",
+        "decimal": ".",
+        "currency_col": "Currency",
+    },
+    "starling": {
+        "detect": ["Counter Party", "Amount (GBP)", "Spending Category"],
+        "date": "Date",
+        "amount": "Amount (GBP)",
+        "description": "Reference",
+        "payee": "Counter Party",
+        "date_format": "%d/%m/%Y",
+        "delimiter": ",",
+        "encoding": "utf-8",
+        "decimal": ".",
+        "currency": "GBP",
+    },
+    "barclays": {  # unverified header
+        "detect": ["Number", "Date", "Account", "Amount", "Subcategory", "Memo"],
+        "date": "Date",
+        "amount": "Amount",
+        "description": "Memo",
+        "payee": "Memo",
+        "date_format": "%d/%m/%Y",
+        "delimiter": ",",
+        "encoding": "cp1252",
+        "decimal": ".",
+        "currency": "GBP",
+    },
+    "hsbc_uk": {  # unverified header
+        "detect": ["Date", "Description", "Paid out", "Paid in", "Balance"],
+        "date": "Date",
+        "description": "Description",
+        "payee": "Description",
+        "date_format": "%d/%m/%Y",
+        "delimiter": ",",
+        "encoding": "cp1252",
+        "decimal": ".",
+        "amount_sign": "split_cols",
+        "amount_debit": "Paid out",
+        "amount_credit": "Paid in",
+        "currency": "GBP",
+    },
+    "lloyds": {  # also Halifax / Bank of Scotland (same export)
+        "detect": ["Transaction Date", "Sort Code", "Debit Amount", "Credit Amount"],
+        "date": "Transaction Date",
+        "description": "Transaction Description",
+        "payee": "Transaction Description",
+        "date_format": "%d/%m/%Y",
+        "delimiter": ",",
+        "encoding": "cp1252",
+        "decimal": ".",
+        "amount_sign": "split_cols",
+        "amount_debit": "Debit Amount",
+        "amount_credit": "Credit Amount",
+        "currency": "GBP",
+    },
+    "santander_uk": {  # unverified header
+        "detect": ["Date", "Description", "Money in", "Money out", "Balance"],
+        "date": "Date",
+        "description": "Description",
+        "payee": "Description",
+        "date_format": "%d/%m/%Y",
+        "delimiter": ",",
+        "encoding": "cp1252",
+        "decimal": ".",
+        "amount_sign": "split_cols",
+        "amount_debit": "Money out",
+        "amount_credit": "Money in",
+        "currency": "GBP",
+    },
+    "nationwide": {  # a few "Account Name:" style metadata lines precede the header
+        "detect": ["Date", "Transaction type", "Description", "Paid out", "Paid in", "Balance"],
+        "date": "Date",
+        "description": "Description",
+        "payee": "Description",
+        "date_format": "%d %b %Y",
+        "delimiter": ",",
+        "encoding": "cp1252",
+        "decimal": ".",
+        "amount_sign": "split_cols",
+        "amount_debit": "Paid out",
+        "amount_credit": "Paid in",
+        "currency": "GBP",
+    },
+
+    # ── Ireland (Revolut IE uses the "revolut" format above) ─────────────────
+    "aib": {  # unverified header
+        "detect": ["Posted Transactions Date", "Description1", "Debit Amount", "Credit Amount"],
+        "date": "Posted Transactions Date",
+        "description": "Description1",
+        "payee": "Description1",
+        "date_format": "%d/%m/%Y",
+        "delimiter": ",",
+        "encoding": "cp1252",
+        "decimal": ".",
+        "amount_sign": "split_cols",
+        "amount_debit": "Debit Amount",
+        "amount_credit": "Credit Amount",
+        "currency_col": "Posted Currency",
+    },
+    "bank_of_ireland": {  # unverified header
+        "detect": ["Date", "Details", "Debit", "Credit", "Balance"],
+        "date": "Date",
+        "description": "Details",
+        "payee": "Details",
+        "date_format": "%d/%m/%Y",
+        "delimiter": ",",
+        "encoding": "cp1252",
+        "decimal": ".",
+        "amount_sign": "split_cols",
+        "amount_debit": "Debit",
+        "amount_credit": "Credit",
+    },
+
+    # ── Poland (exports are usually cp1250; detect strings are ASCII-only) ───
+    "pko_bp": {  # unverified header
+        "detect": ["Data operacji", "Data waluty", "Typ transakcji", "Kwota"],
+        "date": "Data operacji",
+        "amount": "Kwota",
+        "description": "Opis transakcji",
+        "payee": "Opis transakcji",
+        "date_format": "%Y-%m-%d",
+        "delimiter": ",",
+        "encoding": "cp1250",
+        "decimal": ",",
+        "currency_col": "Waluta",
+    },
+    "mbank": {  # metadata block, then a "#"-prefixed header
+        "detect": ["#Data operacji", "#Opis operacji", "#Kwota"],
+        "date": "#Data operacji",
+        "amount": "#Kwota",
+        "description": "#Opis operacji",
+        "payee": "#Opis operacji",
+        "date_format": "%Y-%m-%d",
+        "delimiter": ";",
+        "encoding": "cp1250",
+        "decimal": ",",
+        "currency": "PLN",
+    },
+    "ing_pl": {  # unverified header
+        "detect": ["Data transakcji", "Dane kontrahenta", "Nr rachunku"],
+        "date": "Data transakcji",
+        "amount": "Kwota transakcji (waluta rachunku)",
+        "description": "Tytuł",
+        "payee": "Dane kontrahenta",
+        "date_format": "%Y-%m-%d",
+        "delimiter": ";",
+        "encoding": "cp1250",
+        "decimal": ",",
+        "currency_col": "Waluta rachunku",
+    },
+    "santander_pl": {  # unverified header
+        "detect": ["Data operacji", "Opis operacji", "Nadawca/Odbiorca", "Saldo po operacji"],
+        "date": "Data operacji",
+        "amount": "Kwota",
+        "description": "Opis operacji",
+        "payee": "Nadawca/Odbiorca",
+        "date_format": "%d-%m-%Y",
+        "delimiter": ",",
+        "encoding": "cp1250",
+        "decimal": ",",
+        "currency": "PLN",
+    },
+
+    # ── Netherlands ──────────────────────────────────────────────────────────
+    "ing_nl": {  # separate "Af Bij" (debit/credit) indicator column; delimiter , or ;
+        "detect": ["Naam / Omschrijving", "Af Bij", "Mutatiesoort"],
+        "date": "Datum",
+        "amount": "Bedrag (EUR)",
+        "description": "Mededelingen",
+        "payee": "Naam / Omschrijving",
+        "date_format": "%Y%m%d",
+        "delimiter": ",",
+        "encoding": "utf-8",
+        "decimal": ",",
+        "amount_sign": "indicator",
+        "indicator_col": "Af Bij",
+        "indicator_debit": ["af"],
+    },
+    "abn_amro": {  # TXT/TAB export has NO header row: account, currency, date, start bal, end bal, amount, text
+        "detect": [],
+        "positional": True,
+        "col_date": 2,
+        "col_amount": 5,
+        "col_description": 6,
+        "col_currency": 1,
+        "date_format": "%Y%m%d",
+        "delimiter": "\t",
+        "encoding": "cp1252",
+        "decimal": ",",   # unverified layout
+    },
+    "rabobank": {  # unverified header
+        "detect": ["IBAN/BBAN", "Naam tegenpartij", "Omschrijving-1"],
+        "date": "Datum",
+        "amount": "Bedrag",
+        "description": "Omschrijving-1",
+        "payee": "Naam tegenpartij",
+        "date_format": "%Y-%m-%d",
+        "delimiter": ",",
+        "encoding": "utf-8",
+        "decimal": ",",
+        "currency_col": "Munt",
+    },
+    "bunq": {  # unverified header; delimiter and decimal separator vary by export locale
+        "detect": ["Interest Date", "Counterparty", "Name", "Amount"],
+        "date": "Date",
+        "amount": "Amount",
+        "description": "Description",
+        "payee": "Name",
+        "date_format": "%Y-%m-%d",
+        "delimiter": ",",
+        "encoding": "utf-8",
+        "decimal": "auto",   # "," when the file is ";"-delimited, else "."
+    },
+
+    # ── France (accented headers; exports are usually cp1252) ────────────────
+    "bnp_paribas": {  # unverified header
+        "detect": ["Date operation", "Libelle", "Montant"],
+        "date": "Date operation",
+        "amount": "Montant",
+        "description": "Libelle",
+        "payee": "Libelle",
+        "date_format": "%d/%m/%Y",
+        "delimiter": ";",
+        "encoding": "cp1252",
+        "decimal": ",",
+    },
+    "boursorama": {
+        "detect": ["dateOp", "dateVal", "supplierFound", "accountNum"],
+        "date": "dateOp",
+        "amount": "amount",
+        "description": "label",
+        "payee": "supplierFound",
+        "date_format": "%Y-%m-%d",
+        "delimiter": ";",
+        "encoding": "utf-8",
+        "decimal": ",",
+    },
+    "credit_agricole": {  # unverified header; account metadata lines precede it
+        "detect": ["Date", "Libellé", "Débit euros", "Crédit euros"],
+        "date": "Date",
+        "description": "Libellé",
+        "payee": "Libellé",
+        "date_format": "%d/%m/%Y",
+        "delimiter": ";",
+        "encoding": "cp1252",
+        "decimal": ",",
+        "amount_sign": "split_cols",
+        "amount_debit": "Débit euros",
+        "amount_credit": "Crédit euros",
+    },
 }
 
 
 def _most_specific(matches: list[str], line: str) -> str:
     """Several formats can share their detect columns (Commerzbank's header also
-    satisfies Sparkasse's). Prefer the one whose configured data columns are all
-    present in this header, else the first match."""
+    satisfies Sparkasse's, Nationwide's satisfies HSBC UK's). Among the matches
+    whose configured data columns are all present in this header, prefer the one
+    with the most detect columns (the most specific), then the first declared;
+    else the first match. Non-ASCII column names are not compared because the
+    header was decoded before the bank's own encoding was known."""
     def readable(name: str) -> bool:
         fmt = KNOWN_FORMATS[name]
-        cols = [fmt.get(k) for k in ("date", "amount", "description", "payee")]
-        return all(c in line for c in cols if c)
-    return next((m for m in matches if readable(m)), matches[0])
+        cols = [fmt.get(k) for k in ("date", "amount", "description", "payee",
+                                     "amount_debit", "amount_credit", "indicator_col")]
+        return all(c in line for c in cols if c and c.isascii())
+    readable_matches = [m for m in matches if readable(m)]
+    if not readable_matches:
+        return matches[0]
+    return max(readable_matches, key=lambda m: len(KNOWN_FORMATS[m]["detect"]))
 
 
 def detect_bank_format(file_path: str) -> Optional[str]:
     """Detect which bank format a CSV is from by checking headers."""
-    for enc in ("utf-8", "latin-1", "cp1252"):
-        try:
-            with open(file_path, "r", encoding=enc) as f:
-                # Read first few lines, skip potential metadata rows
-                lines = []
-                for _ in range(15):
-                    line = f.readline()
-                    if line:
-                        lines.append(line.strip())
+    try:
+        text = read_text(file_path, limit=64 * 1024)
+    except OSError:
+        return None
+    # Read first few lines, skip potential metadata rows
+    lines = [ln.strip() for ln in text.splitlines()[:15]]
 
-            # Check each line for header matches
-            for line in lines:
-                matches: list[str] = []
-                for bank_name, fmt in KNOWN_FORMATS.items():
-                    detect_cols = fmt["detect"]
-                    if not detect_cols:
-                        continue  # positional formats handled separately
-                    if all(col in line for col in detect_cols):
-                        matches.append(bank_name)
-                if matches:
-                    return _most_specific(matches, line)
+    # Check each line for header matches
+    for line in lines:
+        matches: list[str] = []
+        for bank_name, fmt in KNOWN_FORMATS.items():
+            detect_cols = fmt["detect"]
+            if not detect_cols:
+                continue  # positional formats handled separately
+            if all(col in line for col in detect_cols):
+                matches.append(bank_name)
+        if matches:
+            return _most_specific(matches, line)
 
-            # Check positional formats (no header row): try to parse first line
-            # as MM/DD/YYYY, float, ...
-            for bank_name, fmt in KNOWN_FORMATS.items():
-                if not fmt.get("positional"):
-                    continue
-                first_line = lines[0] if lines else ""
-                parts = first_line.split(fmt.get("delimiter", ","))
-                if len(parts) > max(fmt.get("col_date", 0), fmt.get("col_amount", 1), fmt.get("col_description", 4)):
-                    try:
-                        datetime.strptime(parts[fmt["col_date"]].strip().strip('"'), fmt["date_format"])
-                        float(parts[fmt["col_amount"]].strip().strip('"').replace(",", ""))
-                        return bank_name
-                    except (ValueError, IndexError):
-                        continue
-        except (UnicodeDecodeError, IOError):
+    # Check positional formats (no header row): try to parse first line
+    # as a date, float, ...
+    first_line = lines[0] if lines else ""
+    for bank_name, fmt in KNOWN_FORMATS.items():
+        if not fmt.get("positional"):
             continue
+        parts = first_line.split(fmt.get("delimiter", ","))
+        if len(parts) > max(fmt.get("col_date", 0), fmt.get("col_amount", 1), fmt.get("col_description", 4)):
+            try:
+                datetime.strptime(parts[fmt["col_date"]].strip().strip('"'), fmt["date_format"])
+                float(parts[fmt["col_amount"]].strip().strip('"').replace(",", ""))
+                return bank_name
+            except (ValueError, IndexError):
+                continue
     return None
 
 
@@ -455,9 +749,9 @@ def detect_source_accounts(file_path: str, bank_format: Optional[str] = None) ->
         return []
     fmt = KNOWN_FORMATS[bank_format]
     try:
-        with open(file_path, "r", encoding=fmt.get("encoding", "utf-8"), errors="replace") as f:
-            reader = csv.DictReader(f, delimiter=fmt.get("delimiter", ","))
-            return sorted({(row.get(col) or "").strip() for row in reader} - {""})
+        text = read_text(file_path, fmt.get("encoding"))
+        reader = csv.DictReader(io.StringIO(text, newline=""), delimiter=fmt.get("delimiter", ","))
+        return sorted({(row.get(col) or "").strip() for row in reader} - {""})
     except Exception:
         return []
 
@@ -487,6 +781,61 @@ def _sanitize_cell(value: str) -> str:
     return stripped
 
 
+_NUMERIC_DATE = re.compile(r"^\s*(\d{1,2})([/.\-])(\d{1,2})\2(\d{4}|\d{2})(?!\d)")
+_DEFAULT_DATE_RE = re.compile(r"^%([dm])([/\-])%([dm])\2%[Yy](.*)$")
+
+
+def infer_date_format(values: list[str], default_fmt: str) -> str:
+    """Pick one day/month order for the whole file.
+
+    Only slash/dash numeric formats are ambiguous (03/04/2024). Every value is
+    scanned: a first field above 12 proves day-first, a second field above 12
+    proves month-first. With no proof, or contradicting proof, the format's own
+    (locale) order is kept. The result is applied to every row, so one file is
+    never read with two different orders."""
+    m = _DEFAULT_DATE_RE.match(default_fmt or "")
+    if not m:
+        return default_fmt
+    default_dayfirst = m.group(1) == "d"
+    suffix = m.group(4)
+
+    day_first_proof = month_first_proof = False
+    seps: dict[str, int] = {}
+    year_lens: set[int] = set()
+    for value in values:
+        dm = _NUMERIC_DATE.match(value or "")
+        if not dm or dm.group(2) == ".":
+            continue
+        first, second = int(dm.group(1)), int(dm.group(3))
+        day_first_proof |= first > 12
+        month_first_proof |= second > 12
+        seps[dm.group(2)] = seps.get(dm.group(2), 0) + 1
+        year_lens.add(len(dm.group(4)))
+    if not seps:
+        return default_fmt
+
+    if day_first_proof and not month_first_proof:
+        dayfirst = True
+    elif month_first_proof and not day_first_proof:
+        dayfirst = False
+    else:
+        dayfirst = default_dayfirst  # no proof, or contradictory proof
+    sep = max(seps, key=seps.get)
+    year = "%y" if year_lens == {2} else "%Y"
+    order = ("%d", "%m") if dayfirst else ("%m", "%d")
+    return f"{order[0]}{sep}{order[1]}{sep}{year}{suffix}"
+
+
+def _same_order_alternatives(fmt: str) -> tuple[str, ...]:
+    """Formats with the same day/month order as `fmt` but another separator or
+    year width: safe fallbacks that cannot flip the file's order."""
+    m = _DEFAULT_DATE_RE.match(fmt or "")
+    if not m:
+        return ()
+    a, b = ("%d", "%m") if m.group(1) == "d" else ("%m", "%d")
+    return tuple(f"{a}{sep}{b}{sep}{y}" for sep in ("/", "-") for y in ("%Y", "%y"))
+
+
 def _parse_date(value: str, fmt: str = "%d.%m.%Y") -> str:
     """Parse date string to ISO format."""
     value = value.strip().strip('"')
@@ -494,8 +843,12 @@ def _parse_date(value: str, fmt: str = "%d.%m.%Y") -> str:
         dt = datetime.strptime(value, fmt)
         return dt.date().isoformat()
     except ValueError:
-        # Try common alternatives
-        for alt_fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y"):
+        if _DEFAULT_DATE_RE.match(fmt or ""):
+            # Ambiguous numeric format: never re-guess day vs month per row.
+            alts = _same_order_alternatives(fmt) + ("%Y-%m-%d", "%d.%m.%Y", "%d.%m.%y")
+        else:
+            alts = ("%Y-%m-%d", "%d.%m.%Y", "%d.%m.%y", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y")
+        for alt_fmt in alts:
             try:
                 dt = datetime.strptime(value[:10], alt_fmt)
                 return dt.date().isoformat()
@@ -531,6 +884,42 @@ def parse_csv(
     return _parse_generic(file_path, currency, date_format)
 
 
+def _resolve_delimiter(header_line: str, fmt: dict) -> str:
+    """The format's own delimiter unless the header only splits into the
+    expected columns with another one (ING NL, bunq: "," or ";" by export)."""
+    declared = fmt.get("delimiter", ",")
+    for delim in (declared, ";", ",", "\t"):
+        cells = [c.strip().strip('"') for c in header_line.split(delim)]
+        if len(cells) > 1 and all(any(col in cell for cell in cells) for col in fmt["detect"]):
+            return delim
+    return declared
+
+
+def _load_known(file_path: str, fmt: dict) -> tuple[list[dict], str]:
+    """Rows of a header-based known-format file as dicts, plus the delimiter.
+
+    Skips metadata lines above the header, strips BOMs and header whitespace,
+    and keeps quoted multi-line cells together."""
+    text = read_text(file_path, fmt.get("encoding"))
+    lines = text.split("\n")
+    header_idx = None
+    for i, line in enumerate(lines):
+        if all(col in line for col in fmt["detect"]):
+            header_idx = i
+            break
+    if header_idx is None:
+        return [], fmt.get("delimiter", ",")
+    delimiter = _resolve_delimiter(lines[header_idx], fmt)
+    reader = csv.reader(io.StringIO("\n".join(lines[header_idx:]), newline=""), delimiter=delimiter)
+    header = [h.strip() for h in next(reader, [])]
+    rows = []
+    for cells in reader:
+        if not any(c.strip() for c in cells):
+            continue
+        rows.append(dict(zip(header, cells)))
+    return rows, delimiter
+
+
 def count_data_rows(file_path: str, bank_format: Optional[str] = None) -> int:
     """Count data rows in the file's data section — for import-loss
     accounting (import_router surfaces skipped = count_data_rows(...) -
@@ -542,10 +931,10 @@ def count_data_rows(file_path: str, bank_format: Optional[str] = None) -> int:
     fmt = KNOWN_FORMATS.get(bank_format) if bank_format else None
 
     try:
-        with open(file_path, "r", encoding=(fmt or {}).get("encoding", "utf-8"), errors="replace") as f:
-            lines = f.read().split("\n")
+        text = read_text(file_path, (fmt or {}).get("encoding"))
     except OSError:
         return 0
+    lines = text.split("\n")
 
     delimiter = (fmt or {}).get("delimiter", ",")
 
@@ -553,45 +942,59 @@ def count_data_rows(file_path: str, bank_format: Optional[str] = None) -> int:
         return sum(1 for row in csv.reader(lines, delimiter=delimiter) if any(c.strip() for c in row))
 
     if fmt:
-        header_idx = None
-        for i, line in enumerate(lines):
-            if fmt["detect"][0] in line:
-                header_idx = i
-                break
-        if header_idx is None:
-            return 0
-        csv_lines = "\n".join(lines[header_idx:])
-        return sum(1 for _ in csv.DictReader(csv_lines.splitlines(), delimiter=delimiter))
+        return len(_load_known(file_path, fmt)[0])
 
     # Generic path: best-effort — non-empty lines minus one header row.
     non_empty = [ln for ln in lines if ln.strip()]
     return max(0, len(non_empty) - 1)
 
 
+def _file_currency(fmt: dict, currency: str) -> str:
+    """A format that implies a currency (UK banks -> GBP) overrides the
+    router's default "EUR"; an explicit non-EUR caller currency wins."""
+    return fmt["currency"] if fmt.get("currency") and currency == "EUR" else currency
+
+
+def _row_currency(row: dict, fmt: dict, default: str) -> str:
+    """Per-row ISO code from the format's currency column (Revolut, Wise, ...)."""
+    col = fmt.get("currency_col")
+    code = (row.get(col) or "").strip().upper() if col else ""
+    return code if re.fullmatch(r"[A-Z]{3}", code) else default
+
+
+def _split_amount(row: dict, fmt: dict, decimal: str) -> Optional[float]:
+    """Signed amount from separate debit/credit columns; None if both empty."""
+    credit_val = (row.get(fmt.get("amount_credit", "Credit")) or "").strip()
+    debit_val = (row.get(fmt.get("amount_debit", "Debit")) or "").strip()
+    credit_amt = abs(_parse_amount(credit_val, decimal)) if credit_val else 0.0
+    debit_amt = abs(_parse_amount(debit_val, decimal)) if debit_val else 0.0
+    # YNAB writes "$0.00" in both columns by default — check parsed values,
+    # not string presence. Debit columns may hold positive or negative numbers.
+    if credit_amt == 0 and debit_amt == 0:
+        return None
+    return credit_amt - debit_amt
+
+
 def _parse_known_format(file_path: str, fmt: dict, currency: str, bank_format: str = "") -> list[dict]:
     """Parse using a known bank format definition."""
-    encoding = fmt.get("encoding", "utf-8")
     delimiter = fmt.get("delimiter", ",")
     decimal = fmt.get("decimal", ".")
     dfmt = fmt.get("date_format", "%Y-%m-%d")
     amount_sign = fmt.get("amount_sign", "as_is")
+    currency = _file_currency(fmt, currency)
 
     transactions = []
-
-    with open(file_path, "r", encoding=encoding, errors="replace") as f:
-        content = f.read()
-
-    lines = content.split("\n")
 
     # Positional format (e.g. Wells Fargo — no header row)
     if fmt.get("positional"):
         col_date = fmt["col_date"]
         col_amount = fmt["col_amount"]
         col_desc = fmt["col_description"]
-        reader = csv.reader(lines, delimiter=delimiter)
-        for row in reader:
-            if len(row) <= max(col_date, col_amount, col_desc):
-                continue
+        text = read_text(file_path, fmt.get("encoding"))
+        rows = [r for r in csv.reader(io.StringIO(text, newline=""), delimiter=delimiter)
+                if len(r) > max(col_date, col_amount, col_desc)]
+        dfmt = infer_date_format([r[col_date].strip().strip('"') for r in rows], dfmt)
+        for row in rows:
             date_val = row[col_date].strip().strip('"')
             amount_val = row[col_amount].strip().strip('"')
             desc_val = row[col_desc].strip().strip('"') if col_desc < len(row) else ""
@@ -602,48 +1005,34 @@ def _parse_known_format(file_path: str, fmt: dict, currency: str, bank_format: s
             except ValueError:
                 continue  # skip non-data rows
             amount = _parse_amount(amount_val, decimal)
+            col_cur = fmt.get("col_currency")
+            code = row[col_cur].strip().upper() if col_cur is not None and col_cur < len(row) else ""
             transactions.append({
                 "date": _parse_date(date_val, dfmt),
                 "amount": round(amount, 2),
                 "description": _sanitize_cell(desc_val),
                 "payee": "",
-                "currency": currency,
+                "currency": code if re.fullmatch(r"[A-Z]{3}", code) else currency,
                 "raw": {"_row": row},
             })
         return transactions
 
-    # Find the header row
-    header_idx = None
-    for i, line in enumerate(lines):
-        if fmt["detect"][0] in line:
-            header_idx = i
-            break
+    rows, used_delimiter = _load_known(file_path, fmt)
+    if decimal == "auto":
+        decimal = "," if used_delimiter == ";" else "."
 
-    if header_idx is None:
-        return []
+    # One day/month order for the whole file (scans every row).
+    dfmt = infer_date_format([r.get(fmt["date"], "") for r in rows], dfmt)
 
-    # Parse from header row onwards
-    csv_lines = "\n".join(lines[header_idx:])
-    reader = csv.DictReader(csv_lines.splitlines(), delimiter=delimiter)
-
-    for row in reader:
+    for row in rows:
         date_val = row.get(fmt["date"], "")
         desc_val = row.get(fmt.get("description", ""), "")
         payee_val = row.get(fmt.get("payee", ""), "")
 
         # Resolve amount based on amount_sign mode
         if amount_sign == "split_cols":
-            credit_val = row.get(fmt.get("amount_credit", "Credit"), "").strip()
-            debit_val = row.get(fmt.get("amount_debit", "Debit"), "").strip()
-            credit_amt = _parse_amount(credit_val, decimal) if credit_val else 0.0
-            debit_amt = _parse_amount(debit_val, decimal) if debit_val else 0.0
-            # YNAB writes "$0.00" in both columns by default — check parsed value,
-            # not string presence.
-            if credit_amt > 0:
-                amount = credit_amt
-            elif debit_amt > 0:
-                amount = -debit_amt
-            else:
+            amount = _split_amount(row, fmt, decimal)
+            if amount is None:
                 continue
         else:
             amount_val = row.get(fmt.get("amount", ""), "")
@@ -654,17 +1043,23 @@ def _parse_known_format(file_path: str, fmt: dict, currency: str, bank_format: s
                 type_val = row.get(fmt.get("type_col", "Transaction Type"), "").strip().lower()
                 if type_val == "debit":
                     amount = -abs(amount)
+            elif amount_sign == "indicator":
+                flag = (row.get(fmt["indicator_col"]) or "").strip().lower()
+                amount = -abs(amount) if flag in fmt["indicator_debit"] else abs(amount)
             # "as_is" and "monarch" use the value as parsed
 
         if not date_val:
             continue
+
+        if amount > 0 and fmt.get("payee_credit"):
+            payee_val = row.get(fmt["payee_credit"], "") or payee_val
 
         txn = {
             "date": _parse_date(date_val, dfmt),
             "amount": round(amount, 2),
             "description": _sanitize_cell((desc_val or "").strip()),
             "payee": _sanitize_cell((payee_val or "").strip()),
-            "currency": currency,
+            "currency": _row_currency(row, fmt, currency),
             "raw": dict(row),
         }
 
@@ -681,24 +1076,36 @@ def _parse_known_format(file_path: str, fmt: dict, currency: str, bank_format: s
     return transactions
 
 
+_DEBIT_HEADERS = {
+    "paid out", "money out", "debit", "debit amount", "debits", "withdrawal", "withdrawals",
+    "outflow", "soll", "belastung", "débit", "débit euros", "debit euros",
+    "wypłata", "wyplata", "obciążenia", "obciazenia", "uitgaven", "af",
+}
+_CREDIT_HEADERS = {
+    "paid in", "money in", "credit", "credit amount", "credits", "deposit", "deposits",
+    "inflow", "haben", "gutschrift", "crédit", "crédit euros", "credit euros",
+    "wpłata", "wplata", "uznania", "inkomsten", "bij",
+}
+_CURRENCY_HEADERS = {"currency", "währung", "waehrung", "waluta", "munt", "devise", "ccy"}
+
+
+def _find_exact_col(headers: list[str], names: set) -> Optional[int]:
+    """Header index whose name (ignoring a trailing "(£)"/"(EUR)" unit) is one of `names`."""
+    for i, h in enumerate(headers):
+        if re.sub(r"\s*\(.*?\)\s*$", "", h).strip() in names:
+            return i
+    return None
+
+
 def _parse_generic(file_path: str, currency: str, date_format: Optional[str] = None) -> list[dict]:
     """Fallback: parse a generic CSV by guessing columns."""
     transactions = []
 
-    for enc in ("utf-8", "latin-1", "cp1252"):
-        try:
-            with open(file_path, "r", encoding=enc) as f:
-                # Try both comma and semicolon
-                sample = f.read(4000)
-                delimiter = ";" if sample.count(";") > sample.count(",") else ","
-                f.seek(0)
-                reader = csv.reader(f, delimiter=delimiter)
-                rows = list(reader)
-            break
-        except UnicodeDecodeError:
-            continue
-    else:
-        return []
+    text = read_text(file_path)
+    # Try both comma and semicolon (tab for Excel/UTF-16 text exports)
+    sample = text[:4000]
+    delimiter = max((";", ",", "\t"), key=lambda d: (sample.count(d), d == ","))
+    rows = list(csv.reader(io.StringIO(text, newline=""), delimiter=delimiter))
 
     if len(rows) < 2:
         return []
@@ -706,40 +1113,76 @@ def _parse_generic(file_path: str, currency: str, date_format: Optional[str] = N
     headers = [h.strip().lower() for h in rows[0]]
 
     # Guess column indices
-    date_col = _find_col(headers, ["date", "datum", "buchungsdatum", "buchung", "buchungstag", "started date"])
-    amount_col = _find_col(headers, ["amount", "betrag", "betrag (eur)", "amount (eur)", "value"])
-    desc_col = _find_col(headers, ["description", "verwendungszweck", "buchungstext", "payment reference", "memo"])
-    payee_col = _find_col(headers, ["payee", "auftraggeber", "empfänger", "begünstigter", "merchant", "name"])
+    date_col = _find_col(headers, ["date", "datum", "buchungsdatum", "buchung", "buchungstag", "started date",
+                                   "data", "dateop"])
+    amount_col = _find_col(headers, ["amount", "betrag", "betrag (eur)", "amount (eur)", "value",
+                                     "kwota", "montant", "bedrag"])
+    desc_col = _find_col(headers, ["description", "verwendungszweck", "buchungstext", "payment reference", "memo",
+                                   "opis", "tytuł", "omschrijving", "libell", "details", "reference"])
+    payee_col = _find_col(headers, ["payee", "auftraggeber", "empfänger", "begünstigter", "merchant", "name",
+                                    "kontrahent", "counter party", "counterparty", "nadawca"])
+    currency_col = _find_exact_col(headers, _CURRENCY_HEADERS)
 
-    if date_col is None or amount_col is None:
+    # Separate debit/credit columns instead of one signed amount
+    debit_col = credit_col = None
+    if amount_col is None:
+        debit_col = _find_exact_col(headers, _DEBIT_HEADERS)
+        credit_col = _find_exact_col(headers, _CREDIT_HEADERS)
+
+    if date_col is None or (amount_col is None and debit_col is None and credit_col is None):
         return []
 
-    dfmt = date_format or "%d.%m.%Y"
+    data_rows = [r for r in rows[1:] if len(r) > date_col and r[date_col].strip()]
+    dfmt = date_format or infer_date_format([r[date_col].strip() for r in data_rows], "%d.%m.%Y")
+    dfmt = date_format or _generic_date_format(dfmt, data_rows, date_col)
+
+    def cell(row: list[str], col: Optional[int]) -> str:
+        return row[col].strip() if col is not None and col < len(row) else ""
 
     for row in rows[1:]:
-        if len(row) <= max(date_col, amount_col):
+        if len(row) <= date_col:
             continue
         date_val = row[date_col].strip()
-        amount_val = row[amount_col].strip()
-        if not date_val or not amount_val:
+        if not date_val:
             continue
 
-        # Guess decimal format
-        decimal = "," if "," in amount_val and "." not in amount_val else "."
-        amount = _parse_amount(amount_val, decimal)
+        if amount_col is not None:
+            amount_val = cell(row, amount_col)
+            if not amount_val:
+                continue
+            # Guess decimal format
+            decimal = "," if "," in amount_val and "." not in amount_val else "."
+            amount = _parse_amount(amount_val, decimal)
+        else:
+            debit_val, credit_val = cell(row, debit_col), cell(row, credit_col)
+            if not debit_val and not credit_val:
+                continue
+            amounts = []
+            for v in (credit_val, debit_val):
+                decimal = "," if "," in v and "." not in v else "."
+                amounts.append(abs(_parse_amount(v, decimal)) if v else 0.0)
+            amount = amounts[0] - amounts[1]
 
-        desc = row[desc_col].strip() if desc_col is not None and desc_col < len(row) else ""
-        payee = row[payee_col].strip() if payee_col is not None and payee_col < len(row) else ""
-
+        code = cell(row, currency_col).upper()
         transactions.append({
             "date": _parse_date(date_val, dfmt),
             "amount": round(amount, 2),
-            "description": _sanitize_cell(desc),
-            "payee": _sanitize_cell(payee),
-            "currency": currency,
+            "description": _sanitize_cell(cell(row, desc_col)),
+            "payee": _sanitize_cell(cell(row, payee_col)),
+            "currency": code if re.fullmatch(r"[A-Z]{3}", code) else currency,
         })
 
     return transactions
+
+
+def _generic_date_format(dfmt: str, data_rows: list[list[str]], date_col: int) -> str:
+    """The generic parser has no declared locale: when the dates are slash/dash
+    numerics, settle one order for the file (day-first unless a value proves
+    month-first) instead of the dotted default that would fail every row."""
+    values = [r[date_col].strip() for r in data_rows]
+    if any(_NUMERIC_DATE.match(v) and not re.match(r"^\s*\d{1,2}\.", v) for v in values):
+        return infer_date_format(values, "%d/%m/%Y")
+    return dfmt
 
 
 def _find_col(headers: list[str], candidates: list[str]) -> Optional[int]:
