@@ -108,7 +108,7 @@ Do not type your encryption passphrase into the chat: everything you type ends u
 export FINANCE_PASSPHRASE='your long passphrase'
 ```
 
-`encrypt_sensitive_files()` and `decrypt_sensitive_files()` read `FINANCE_PASSPHRASE` when no passphrase argument is given. A CLI prompt (`getpass`) works too.
+`encrypt_sensitive_files()` and `decrypt_sensitive_files()` read `FINANCE_PASSPHRASE` when no passphrase argument is given; the environment variable is the preferred route. Both functions also accept an explicit `passphrase` argument, but that value then passes through the chat. There is no interactive `getpass` prompt.
 
 ## Network calls (opt-in)
 

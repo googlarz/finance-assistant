@@ -548,11 +548,16 @@ def decrypt_blob(file_path: str, passphrase: str) -> str:
 
 
 def _blob_targets(finance_dir: Path) -> list[Path]:
-    """Non-JSON stores: the SQLite database and preserved original statements."""
+    """Non-JSON stores: the SQLite database, preserved original statements and
+    exported CSV/XLSX copies of the ledger."""
     targets = [finance_dir / "finance.db"]
     originals = finance_dir / "originals"
     if originals.is_dir():
         targets += [p for p in originals.rglob("*") if p.is_file()]
+    exports = finance_dir / "exports"
+    if exports.is_dir():
+        targets += [p for p in exports.rglob("*")
+                    if p.is_file() and p.suffix.lower() in (".csv", ".xlsx")]
     return [p for p in targets if p.is_file()]
 
 
@@ -610,7 +615,7 @@ def encrypt_sensitive_files(passphrase: Optional[str] = None) -> dict:
     """
     Encrypt all persisted financial data with Fernet AES: every JSON file under
     .finance/ (including audit/access_log.json, budgets, net-worth snapshots),
-    finance.db and originals/. Passphrase may come from FINANCE_PASSPHRASE.
+    finance.db, originals/ and exports/*.csv|xlsx. Passphrase may come from FINANCE_PASSPHRASE.
     Also hardens file permissions to 600 after encryption.
     """
     if not _CRYPTO_AVAILABLE:

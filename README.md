@@ -1,11 +1,11 @@
 # Finance Assistant
 
 [![version](https://img.shields.io/badge/version-4.2.4-blue)](https://github.com/googlarz/finance-assistant/releases)
-[![tests](https://img.shields.io/badge/tests-1%2C722%20passing-brightgreen)](docs/ARCHITECTURE.md#testing)
+[![tests](https://img.shields.io/badge/tests-1%2C736%20passing-brightgreen)](docs/ARCHITECTURE.md#testing)
 [![tax cases](https://img.shields.io/badge/tax%20law-39%20official%20cases-success)](#locales--validation)
 [![locales](https://img.shields.io/badge/locales-DE·UK·US·FR·NL·PL·IE-orange)](#locales--validation)
 [![local-first](https://img.shields.io/badge/local--first-no%20cloud-black)](docs/SECURITY.md)
-[![license](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey)](LICENSE)
+[![license](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 
 **Real math. Real law. Your machine.**
 

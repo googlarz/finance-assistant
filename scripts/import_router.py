@@ -226,18 +226,22 @@ def import_file(
             "original_saved": original_saved,
         }
         if not dry_run:
-            add_transaction(
-                date=txn["date"],
-                type=txn.get("type", "expense"),
-                amount=txn["amount"],
-                category=txn.get("category", "other_expense"),
-                description=txn.get("description", ""),
-                account_id=account_id,
-                currency=txn.get("currency", currency),
-                payee=txn.get("payee", ""),
-                tags=txn.get("tags", []),
-                import_source="image",
-            )
+            try:
+                add_transaction(
+                    date=txn["date"],
+                    type=txn.get("type", "expense"),
+                    amount=txn["amount"],
+                    category=txn.get("category", "other_expense"),
+                    description=txn.get("description", ""),
+                    account_id=account_id,
+                    currency=txn.get("currency", currency),
+                    payee=txn.get("payee", ""),
+                    tags=txn.get("tags", []),
+                    import_source="image",
+                )
+            except ValueError as exc:
+                return {"error": f"Scanned receipt has an unusable date: {exc}",
+                        "file": file_path, "format": "image"}
             result["imported"] = 1
             result["dry_run"] = False
         return result
@@ -290,6 +294,7 @@ def import_file(
         by_account.setdefault(txn.get("account_id", account_id), []).append(txn)
 
     unique: list[dict] = []
+    near_removed = 0
     for target_account, rows in by_account.items():
         years_in_file = set()
         for txn in rows:
@@ -308,7 +313,11 @@ def import_file(
         fresh = deduplicate(rows, existing, account_id=target_account)
         # Same date + amount as a stored row whose description was only reworded
         # (bank re-export, cleaned-up memo) is the same transaction.
-        unique.extend(drop_near_duplicates(fresh, existing))
+        fresh_ids = {id(r) for r in fresh}
+        exact_matched = [r for r in rows if id(r) not in fresh_ids]
+        kept = drop_near_duplicates(fresh, existing, exact_matched)
+        near_removed += len(fresh) - len(kept)
+        unique.extend(kept)
 
     result = {
         "file": os.path.basename(file_path),
@@ -317,7 +326,8 @@ def import_file(
         "currency": currency,
         "total_parsed": len(raw),
         "total_normalized": len(normalized),
-        "duplicates_removed": len(normalized) - len(unique),
+        "duplicates_removed": len(normalized) - len(unique) - near_removed,
+        "near_duplicates_removed": near_removed,
         "skipped_bad_date": len(bad_date_rows),
         "to_import": len(unique),
         "preview": unique[:10],

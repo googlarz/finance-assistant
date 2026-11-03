@@ -8,7 +8,6 @@ from __future__ import annotations
 import codecs
 import re
 import unicodedata
-from difflib import SequenceMatcher
 from typing import Optional
 
 # ── Encoding ─────────────────────────────────────────────────────────────────
@@ -99,22 +98,27 @@ def _tokens(text: str) -> list[str]:
 def descriptions_match(a: str, b: str) -> bool:
     """True when two descriptions plausibly describe the same bank line."""
     ta, tb = _tokens(a), _tokens(b)
-    if not ta and not tb:
-        return True
     if not ta or not tb:
-        return False
+        return False  # nothing to compare on (digits-only text): never "the same"
     sa, sb = set(ta), set(tb)
-    if sa <= sb or sb <= sa:
-        return True
-    return SequenceMatcher(None, " ".join(ta), " ".join(tb)).ratio() >= 0.75
+    return sa <= sb or sb <= sa
 
 
-def drop_near_duplicates(rows: list[dict], existing: list[dict]) -> list[dict]:
+def _desc_key(txn: dict) -> str:
+    return (txn.get("description") or "").lower()[:50]
+
+
+def drop_near_duplicates(rows: list[dict], existing: list[dict],
+                         exact_matched: Optional[list[dict]] = None) -> list[dict]:
     """Drop `rows` that match an already-stored transaction on date + amount
     and whose description/payee is merely a reworded version of it (the exact
     description match is handled by transaction_logger.deduplicate). Each
     stored transaction can absorb at most one new row, so genuine same-day,
-    same-amount purchases are not collapsed wholesale."""
+    same-amount purchases are not collapsed wholesale.
+
+    `exact_matched` are the file rows the exact dedup already absorbed; the
+    stored transaction each one matched is consumed up front so it cannot
+    absorb a second, merely similar row."""
     index: dict[tuple, list[dict]] = {}
     for old in existing:
         try:
@@ -124,6 +128,15 @@ def drop_near_duplicates(rows: list[dict], existing: list[dict]) -> list[dict]:
         index.setdefault(key, []).append(old)
 
     consumed: set[int] = set()
+    for row in exact_matched or []:
+        try:
+            key = (row.get("date"), round(float(row.get("amount", 0)), 2))
+        except (TypeError, ValueError):
+            continue
+        cands = [o for o in index.get(key, []) if id(o) not in consumed]
+        pick = next((o for o in cands if _desc_key(o) == _desc_key(row)), None) or (cands[0] if cands else None)
+        if pick is not None:
+            consumed.add(id(pick))
     kept = []
     for row in rows:
         try:

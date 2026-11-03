@@ -598,8 +598,8 @@ Users can control their data with `scripts/data_safety.py`:
 - `export_all_data()` — export everything as a single portable JSON file
 - `delete_all_data(confirm=True)` — permanent delete of all financial data
 - `delete_category('accounts', confirm=True)` — delete a specific category
-- `encrypt_sensitive_files(passphrase)` — Fernet AES-128-CBC + HMAC-SHA256 at-rest encryption
-- `decrypt_sensitive_files(passphrase)` — decrypt for use
+- `encrypt_sensitive_files()` — Fernet AES-128-CBC + HMAC-SHA256 at-rest encryption; reads the passphrase from the `FINANCE_PASSPHRASE` env var (do not pass it in chat)
+- `decrypt_sensitive_files()` — decrypt for use; same `FINANCE_PASSPHRASE` env var
 - `harden_permissions()` — chmod 600/700 so only your OS user can read .finance/
   - After decryption succeeds, always tell the user: "Your files are now decrypted. Remember to say 'lock my data' or 'encrypt my data' when you're done."
 - `check_permissions()` — verify no group/world access to your data files
@@ -614,7 +614,7 @@ When the user runs encrypt or decrypt commands:
 - **Never echo or repeat the passphrase back** in any response, even to confirm receipt.
 - Confirm encryption/decryption success without quoting the passphrase (e.g. "Done — your files are encrypted.").
 - After decrypting, always remind the user: "Your files are decrypted. Say 'encrypt my data' when done."
-- Recommend setting the `FINANCE_CRED_PASSPHRASE` environment variable as the preferred approach to avoid typing the passphrase in chat each time.
+- Have the user set `FINANCE_PASSPHRASE` in their shell before starting Claude Code and call the functions without a passphrase argument; only pass `passphrase=` if the user explicitly insists on typing it.
 
 ### Open Banking (GoCardless)
 

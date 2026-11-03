@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import datetime
+from datetime import date as _date, datetime
 from typing import Optional
 
 try:
@@ -159,6 +159,7 @@ def ingest_extracted(
 
     # 1. Sanitize every text field (CSV-injection guard) + coerce types.
     cleaned: list[dict] = []
+    skipped_bad_date = 0
     for r in rows:
         if not isinstance(r, dict):
             continue
@@ -173,6 +174,13 @@ def ingest_extracted(
         date = str(r.get("date", "")).strip()[:10]
         if not date:
             continue
+        try:
+            if len(date) != 10:
+                raise ValueError(date)
+            _date.fromisoformat(date)
+        except ValueError:
+            skipped_bad_date += 1
+            continue
         cleaned.append({
             "date": date,
             "amount": amount,
@@ -182,7 +190,8 @@ def ingest_extracted(
         })
 
     if not cleaned:
-        return {"error": "No valid rows after sanitization.", "to_import": 0, "imported": 0}
+        return {"error": "No valid rows after sanitization.", "to_import": 0, "imported": 0,
+                "skipped_bad_date": skipped_bad_date}
 
     # 2. Normalize + auto-categorize (same path as every other importer).
     normalized = normalize_transactions(cleaned, account_id, "llm", currency)
@@ -212,6 +221,7 @@ def ingest_extracted(
         "total_parsed": len(rows),
         "total_normalized": len(normalized),
         "duplicates_removed": len(normalized) - len(unique),
+        "skipped_bad_date": skipped_bad_date,
         "to_import": len(unique),
         "preview": unique[:10],
         "dry_run": dry_run,
@@ -220,19 +230,26 @@ def ingest_extracted(
     if not dry_run and unique:
         import_ref = str(uuid.uuid4())
         imported = 0
+        failed = 0
         for txn in unique:
-            add_transaction(
-                date=txn["date"],
-                type=txn.get("type", "expense"),
-                amount=txn["amount"],
-                category=txn.get("category", "other_expense"),
-                description=txn.get("description", ""),
-                account_id=account_id,
-                currency=txn.get("currency", currency),
-                import_source=source_label,
-                import_ref=import_ref,
-            )
+            try:
+                add_transaction(
+                    date=txn["date"],
+                    type=txn.get("type", "expense"),
+                    amount=txn["amount"],
+                    category=txn.get("category", "other_expense"),
+                    description=txn.get("description", ""),
+                    account_id=account_id,
+                    currency=txn.get("currency", currency),
+                    import_source=source_label,
+                    import_ref=import_ref,
+                )
+            except ValueError:
+                failed += 1
+                continue
             imported += 1
+        if failed:
+            result["failed_rows"] = failed
         result["imported"] = imported
         result["import_ref"] = import_ref
         result["dry_run"] = False

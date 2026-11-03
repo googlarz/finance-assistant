@@ -15,12 +15,12 @@ from datetime import datetime
 from typing import Optional
 
 try:
-    from amount_parse import parse_amount
+    from amount_parse import parse_amount, infer_decimal
     from import_support import read_text
 except ImportError:  # pragma: no cover
     import sys
     sys.path.insert(0, os.path.dirname(__file__))
-    from amount_parse import parse_amount
+    from amount_parse import parse_amount, infer_decimal
     from import_support import read_text
 
 
@@ -1115,8 +1115,10 @@ def _parse_generic(file_path: str, currency: str, date_format: Optional[str] = N
     # Guess column indices
     date_col = _find_col(headers, ["date", "datum", "buchungsdatum", "buchung", "buchungstag", "started date",
                                    "data", "dateop"])
-    amount_col = _find_col(headers, ["amount", "betrag", "betrag (eur)", "amount (eur)", "value",
-                                     "kwota", "montant", "bedrag"])
+    # A "value date" / "Wertstellungsdatum" column is a date, never the amount.
+    amount_headers = ["" if ("date" in h or "datum" in h) else h for h in headers]
+    amount_col = _find_col(amount_headers, ["amount", "betrag", "betrag (eur)", "amount (eur)", "value",
+                                            "kwota", "montant", "bedrag"])
     desc_col = _find_col(headers, ["description", "verwendungszweck", "buchungstext", "payment reference", "memo",
                                    "opis", "tytuł", "omschrijving", "libell", "details", "reference"])
     payee_col = _find_col(headers, ["payee", "auftraggeber", "empfänger", "begünstigter", "merchant", "name",
@@ -1139,6 +1141,14 @@ def _parse_generic(file_path: str, currency: str, date_format: Optional[str] = N
     def cell(row: list[str], col: Optional[int]) -> str:
         return row[col].strip() if col is not None and col < len(row) else ""
 
+    # One decimal convention per file: "1,000" / "-1.000" are only ambiguous per cell.
+    file_decimal = infer_decimal(
+        cell(r, c) for r in rows[1:] for c in (amount_col, debit_col, credit_col) if c is not None
+    )
+
+    def _dec(v: str) -> str:
+        return file_decimal or ("," if "," in v and "." not in v else ".")
+
     for row in rows[1:]:
         if len(row) <= date_col:
             continue
@@ -1150,17 +1160,14 @@ def _parse_generic(file_path: str, currency: str, date_format: Optional[str] = N
             amount_val = cell(row, amount_col)
             if not amount_val:
                 continue
-            # Guess decimal format
-            decimal = "," if "," in amount_val and "." not in amount_val else "."
-            amount = _parse_amount(amount_val, decimal)
+            amount = _parse_amount(amount_val, _dec(amount_val))
         else:
             debit_val, credit_val = cell(row, debit_col), cell(row, credit_col)
             if not debit_val and not credit_val:
                 continue
             amounts = []
             for v in (credit_val, debit_val):
-                decimal = "," if "," in v and "." not in v else "."
-                amounts.append(abs(_parse_amount(v, decimal)) if v else 0.0)
+                amounts.append(abs(_parse_amount(v, _dec(v))) if v else 0.0)
             amount = amounts[0] - amounts[1]
 
         code = cell(row, currency_col).upper()

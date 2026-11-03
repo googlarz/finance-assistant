@@ -13,7 +13,7 @@ from typing import Optional
 
 from finance_storage import get_finance_dir
 
-COLUMNS = ["date", "account", "description", "amount", "currency", "category", "payee"]
+COLUMNS = ["date", "account", "description", "amount", "currency", "category", "payee", "type"]
 GAIN_COLUMNS = ["symbol", "sell_date", "quantity", "proceeds", "cost", "gain",
                 "holding_days", "type"]
 _FIRST_YEAR = 2000
@@ -22,7 +22,26 @@ _FIRST_YEAR = 2000
 def _safe(value) -> str:
     """Neutralise spreadsheet formula injection in free-text cells."""
     s = "" if value is None else str(value)
-    return "'" + s if s[:1] in ("=", "+", "-", "@") else s
+    return "'" + s if s[:1] in ("=", "+", "-", "@", "\t", "\r") else s
+
+
+_OUTFLOW_TYPES = ("expense", "debt_payment")
+
+
+def _signed_amount(t: dict):
+    """Expenses export as negative, income as positive, regardless of how the
+    ledger stored the sign; other types keep the stored sign."""
+    amt = t.get("amount", 0)
+    try:
+        amt = float(amt)
+    except (TypeError, ValueError):
+        return amt
+    typ = t.get("type")
+    if typ in _OUTFLOW_TYPES:
+        return -abs(amt)
+    if typ == "income":
+        return abs(amt)
+    return amt
 
 
 def _unique_path(path: Path) -> Path:
@@ -58,10 +77,11 @@ def collect_rows(account_id: Optional[str] = None, year: Optional[int] = None,
                 "date": d,
                 "account": t.get("account_id", acct if acct != "all" else ""),
                 "description": t.get("description", ""),
-                "amount": t.get("amount", 0),
+                "amount": _signed_amount(t),
                 "currency": t.get("currency", ""),
                 "category": t.get("category", ""),
                 "payee": t.get("payee", ""),
+                "type": t.get("type", ""),
             })
     rows.sort(key=lambda r: r["date"])
     return rows

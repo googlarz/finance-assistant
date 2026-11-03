@@ -395,7 +395,7 @@ def test_reimport_with_reworded_description_is_deduplicated(tmp_path):
     r1 = import_file(p1, account_id="acc", dry_run=False, keep_original=False)
     assert r1["imported"] == 2
     r2 = import_file(_write(tmp_path, "b.csv", second), account_id="acc", dry_run=True, keep_original=False)
-    assert r2["duplicates_removed"] == 2 and r2["to_import"] == 0
+    assert r2["near_duplicates_removed"] == 1 and r2["duplicates_removed"] == 1 and r2["to_import"] == 0
 
 
 def test_same_amount_different_merchant_is_not_a_duplicate(tmp_path):

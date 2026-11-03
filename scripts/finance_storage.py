@@ -214,7 +214,7 @@ _ENC_MAGIC = b"FAENC1\n"
 
 
 class DataEncryptedError(RuntimeError):
-    """A data file is encrypted; decrypt first (skill.py --decrypt / FINANCE_PASSPHRASE)."""
+    """A data file is encrypted; decrypt first (ask Claude to 'decrypt my data'; set FINANCE_PASSPHRASE in your shell)."""
 
 
 def _is_encrypted_file(path: Path) -> bool:
