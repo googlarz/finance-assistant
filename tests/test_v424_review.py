@@ -169,3 +169,11 @@ def test_docs_match_code():
     assert "`encrypt_sensitive_files(passphrase)`" not in skill
     assert "FINANCE_PASSPHRASE" in skill
     assert "CC%20BY" not in _doc("README.md")
+
+
+def test_dedup_keeps_identical_rows_within_one_file():
+    from transaction_logger import deduplicate
+    rows = [{"date": "2025-01-01", "amount": -5.0, "description": "Coffee"}] * 2
+    assert len(deduplicate(list(rows), [])) == 2
+    stored = [{"date": "2025-01-01", "amount": -5.0, "description": "Coffee"}]
+    assert len(deduplicate(list(rows), stored)) == 1

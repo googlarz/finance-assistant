@@ -746,16 +746,20 @@ def deduplicate(
                 file=sys.stderr,
             )
 
-    existing_keys = set()
-    for t in existing_transactions:
-        key = (t.get("date"), round(float(t.get("amount", 0)), 2), (t.get("description") or "").lower()[:50])
-        existing_keys.add(key)
+    # Multiset match: a stored row absorbs at most one incoming row, so two
+    # genuine same-day same-amount same-memo transactions in one file both import.
+    from collections import Counter
+    existing_counts = Counter(
+        (t.get("date"), round(float(t.get("amount", 0)), 2), (t.get("description") or "").lower()[:50])
+        for t in existing_transactions
+    )
 
     unique = []
     for t in new_transactions:
         key = (t.get("date"), round(float(t.get("amount", 0)), 2), (t.get("description") or "").lower()[:50])
-        if key not in existing_keys:
+        if existing_counts[key] > 0:
+            existing_counts[key] -= 1
+        else:
             unique.append(t)
-            existing_keys.add(key)
 
     return unique

@@ -22,7 +22,7 @@
 ### License
 - LICENSE is now MIT, matching `pyproject.toml` (it previously said CC BY 4.0).
 
-Full suite: 1,736 passed (was 1,630).
+Full suite: 1,737 passed (was 1,630).
 
 ## v4.2.3 — 2026-10-30
 
