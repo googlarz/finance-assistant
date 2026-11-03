@@ -1186,8 +1186,9 @@ def _generic_date_format(dfmt: str, data_rows: list[list[str]], date_col: int) -
 
 
 def _find_col(headers: list[str], candidates: list[str]) -> Optional[int]:
-    for i, h in enumerate(headers):
-        for c in candidates:
+    # Candidate order is priority order ("amount (eur)" must beat "value").
+    for c in candidates:
+        for i, h in enumerate(headers):
             if c in h:
                 return i
     return None

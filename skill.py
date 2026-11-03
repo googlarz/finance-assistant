@@ -121,6 +121,13 @@ def main() -> str:
 
 def _main_body() -> str:
     """Called at skill load time. Returns initial greeting or status."""
+    try:
+        from data_safety import get_encryption_status
+        if get_encryption_status().get("encrypted"):
+            return ("Your finance data is encrypted, so I can't read it yet. Say 'decrypt my data' "
+                    "(passphrase via the FINANCE_PASSPHRASE environment variable, not typed in chat).")
+    except Exception:
+        pass
     _setup_db()
     _setup_security_defaults()
     profile = get_profile()

@@ -210,15 +210,40 @@ def get_proposal_dir() -> Path:
 
 # ── Generic I/O ──────────────────────────────────────────────────────────────
 
+_ENC_MAGIC = b"FAENC1\n"
+
+
+class DataEncryptedError(RuntimeError):
+    """A data file is encrypted; decrypt first (skill.py --decrypt / FINANCE_PASSPHRASE)."""
+
+
+def _is_encrypted_file(path: Path) -> bool:
+    """True for files written by data_safety (binary blobs or the JSON wrapper)."""
+    try:
+        with open(path, "rb") as handle:
+            head = handle.read(4096)
+    except OSError:
+        return False
+    return head.startswith(_ENC_MAGIC) or b'"_encrypted"' in head and b'"fernet"' in head
+
+
 def load_json(path: Path, default: Any = None) -> Any:
     if not path.exists():
         return default
+    if _is_encrypted_file(path):
+        raise DataEncryptedError(
+            "%s is encrypted. Decrypt your data first (it was encrypted with 'encrypt my data')." % path.name
+        )
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
 
 
 def save_json(path: Path, data: Any) -> Path:
     path = Path(path)
+    if path.exists() and _is_encrypted_file(path):
+        raise DataEncryptedError(
+            "Refusing to overwrite encrypted %s. Decrypt your data first." % path.name
+        )
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     try:

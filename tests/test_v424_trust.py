@@ -98,3 +98,23 @@ def test_install_sh():
     subprocess.run(["bash", "-n", str(sh)], check=True)
     txt = sh.read_text()
     assert "submodule update --init" in txt and "py -3" in txt and "WSL" in txt
+
+
+def test_encrypted_json_is_never_overwritten_or_misread(isolated_finance_dir, tmp_path):
+    import json
+    import pytest
+    from finance_storage import DataEncryptedError, load_json, save_json
+    f = tmp_path / "recurring.json"
+    f.write_text(json.dumps({"_encrypted": "fernet", "data": "xx"}))
+    with pytest.raises(DataEncryptedError):
+        load_json(f)
+    with pytest.raises(DataEncryptedError):
+        save_json(f, {"items": []})
+    assert "fernet" in f.read_text()
+
+
+def test_n26_booking_date_header_uses_amount_column(tmp_path):
+    from csv_importer import parse_csv
+    f = tmp_path / "n26.csv"
+    f.write_text('﻿"Booking Date","Value Date","Partner Name","Partner Iban",Type,"Payment Reference","Account Name","Amount (EUR)","Original Amount","Original Currency","Exchange Rate"\n"2024-03-01","2024-03-01","REWE","","Presentment","Food","Main","-23.40","","",""\n', encoding="utf-8")
+    assert [r["amount"] for r in parse_csv(str(f))] == [-23.4]

@@ -10,6 +10,13 @@ from __future__ import annotations
 def run() -> list[str]:
     notes: list[str] = []
 
+    try:  # never touch data while it is encrypted
+        from data_safety import get_encryption_status
+        if get_encryption_status().get("encrypted"):
+            return notes
+    except Exception:
+        pass
+
     try:  # recurring transactions that came due since the last session
         from recurring_engine import generate_due_transactions
         r = generate_due_transactions()
