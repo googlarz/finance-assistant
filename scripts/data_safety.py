@@ -26,11 +26,11 @@ from pathlib import Path
 from typing import Optional
 
 try:
-    from finance_storage import get_finance_dir, ensure_subdir, load_json, save_json
+    from finance_storage import get_finance_dir, ensure_subdir, load_json, save_json, DataEncryptedError
 except ImportError:
     import sys
     sys.path.insert(0, os.path.dirname(__file__))
-    from finance_storage import get_finance_dir, ensure_subdir, load_json, save_json
+    from finance_storage import get_finance_dir, ensure_subdir, load_json, save_json, DataEncryptedError
 
 # Encryption backend — Fernet (AES-128-CBC + HMAC-SHA256) with PBKDF2 key derivation.
 # Falls back to a warning if the `cryptography` package is not installed.
@@ -730,7 +730,10 @@ def _log_access(action: str, detail: str) -> None:
     })
     # Keep last 1000 entries
     log["entries"] = log["entries"][-1000:]
-    save_json(log_path, log)
+    try:
+        save_json(log_path, log)
+    except DataEncryptedError:
+        return  # dir is (partly) encrypted, e.g. mid-encrypt; the log cannot be appended
 
 
 def get_access_log(limit: int = 50) -> list[dict]:

@@ -12,7 +12,7 @@ This one lives entirely on your machine. Drop a bank CSV into an inbox folder, g
 
 What's in this release (v3.7.1):
 - 6 country tax engines (DE, FR, NL, PL, UK, US) — actual bracket-accurate calculations, not estimates
-- 14 bank CSV importers (DKB, ING, Sparkasse, N26, Chase, Bank of America, Wells Fargo, Monarch, YNAB, Mint, Revolut, Wise, Commerzbank, Capital One)
+- 36 bank CSV importers (DKB, ING, Sparkasse, N26, Chase, Bank of America, Wells Fargo, Monarch, YNAB, Mint, Revolut, Wise, Commerzbank, Capital One, plus UK, IE, PL, NL and FR banks)
 - SQLite + JSON dual storage, encrypted backup, audit log of every mutation
 - Detects recurring subscriptions you forgot about (and flags potential double-billings)
 - FIRE calculator with Monte Carlo, debt avalanche/snowball comparison, portfolio drift alerts

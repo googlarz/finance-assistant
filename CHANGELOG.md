@@ -1,13 +1,24 @@
 # Changelog
 
-## v4.2.4 — 2026-11-04
+## v4.2.4 — 2026-11-23
 
 ### Fixed (regressions from 4.1.0)
 - Importing a CSV/TSV with a data row longer than its header no longer crashes the broker probe; tab delimiters are detected.
 - Recurring items are no longer re-booked every session when one item (e.g. an annual Feb-29 start) fails; Feb 29 clamps to Feb 28 in non-leap years, progress is saved per item, errors are surfaced.
 - Broker CSVs: a decimal separator is inferred per file/column, so `1.000` is no longer read as 1.0.
 - `add_transaction` rejects unparseable dates instead of silently booking them today; importers skip and count such rows (`skipped_bad_date`).
+- Unparseable amounts are skipped and counted (`skipped_bad_amount`) instead of being stored as 0.00.
+- While data is encrypted, all writes are refused instead of touching the ciphertext.
 - `tax_optimizer`: donations use the real `gifts` category, Rürup/Homeoffice/Riester/Pauschbetrag come from the locale rules for the tax year.
+
+### Upgrading from 4.2.3
+If you imported with 4.2.3 and later re-import an overlapping file, some rows can be counted twice. Affected sources:
+- Starling and Boursorama: 4.2.3 stored empty descriptions, which the near-duplicate matcher refuses to match.
+- Lloyds/Halifax and AIB: 4.2.3 stored debits as positive income; 4.2.4 adds the correct negative row, so the two net to zero.
+- Generic CSV with US-style dates: `03/04/2024` was read as 3 April and is now read as 4 March.
+- Possibly affected (went through the LLM fallback in 4.2.3, not verified): Sparkasse CAMT, PKO BP, mBank, ING NL, Rabobank, BNP Paribas, HSBC.
+Classic formats (DKB, ING, N26, Revolut, Wise, Chase, BofA and similar) are unaffected.
+Delete the old imports for those accounts before re-importing. 4.2.4 also adds a `warnings` entry to the import result when it detects likely overlap (empty stored descriptions, or the same date and amount stored with the opposite sign).
 
 ### Added
 - 24 bank formats: UK (Monzo, Starling, Barclays, HSBC, Lloyds/Halifax, Santander, Nationwide), IE (AIB, Bank of Ireland), PL (PKO BP, mBank, ING, Santander), NL (ING, ABN AMRO, Rabobank, bunq), FR (BNP, Boursorama, Crédit Agricole), DKB 2023, Sparkasse CAMT. Headers marked `# unverified header` need confirmation from real exports.
@@ -22,7 +33,7 @@
 ### License
 - LICENSE is now MIT, matching `pyproject.toml` (it previously said CC BY 4.0).
 
-Full suite: 1,737 passed (was 1,630).
+Full suite: 1,745 passed (was 1,630).
 
 ## v4.2.3 — 2026-10-30
 

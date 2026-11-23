@@ -2,7 +2,7 @@
 # Run `pip install --upgrade pip && pip install -r requirements.txt` to update
 
 # Security — encryption at rest
-cryptography>=42.0.5,<45
+cryptography>=42.0.5,<51
 
 # PDF and document processing
 pdfplumber>=0.10.0,<1

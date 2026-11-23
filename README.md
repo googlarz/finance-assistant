@@ -11,7 +11,7 @@
 
 A personal finance copilot that applies actual tax statute to your real numbers — not estimates, not vibes. Runs locally through [Claude Code](https://claude.com/product/claude-code); your data never leaves your machine. Open source, free forever.
 
-`7 locales` · `14 bank formats + any file via LLM` · `Monte Carlo FIRE` · `1,630 tests`
+`7 locales` · `36 bank formats + any file via LLM` · `Monte Carlo FIRE` · `1,745 tests`
 
 **[→ Live demo](https://googlarz.github.io/finance-assistant/)** — see a real conversation without installing
 
@@ -138,7 +138,7 @@ A conversational copilot across the full personal-finance lifecycle. The highlig
 - **Tax, law-accurate** — deductions, filing brief for your accountant, and saveable what-ifs (`W-2 vs 1099`, `single vs MFJ`, `max the 401k?`) computed from real brackets in 7 countries.
 - **Plan & project** — budgets, savings goals, debt avalanche/snowball, FIRE with 10,000-path Monte Carlo, rent-vs-buy and salary-offer comparisons.
 - **Track wealth** — portfolio allocation/XIRR, live stock + crypto prices, net-worth health score. Import a broker trade-history CSV and get FIFO lots plus realized capital gains with a simplified tax estimate for DE/UK/IE (rates and allowances checked against primary sources on 2026-09-21; the model is simplified, so a planning aid, not a filing figure).
-- **Import anything** — 14 bank-CSV formats on a fast path; an unrecognized file (foreign bank, scanned PDF, screenshot) is read by Claude directly, same sanitize→dedupe→confirm pipeline.
+- **Import anything** — 36 bank-CSV formats on a fast path; an unrecognized file (foreign bank, scanned PDF, screenshot) is read by Claude directly, same sanitize→dedupe→confirm pipeline.
 - **Stay ahead** — every session surfaces only what needs attention: budget overspend, upcoming bills, tax deadlines, portfolio drift, zombie subscriptions ("still charging after you flagged it to cancel"), FIRE progress. Stale alerts auto-suppress. Say `hi` for a one-line proactive check-in — it picks the single most relevant thing and asks you about it.
 - **Self-maintaining ledger** — each session books due recurring transactions, refreshes budgets and snapshots, and flags money it can't explain: tell it "my DKB balance on 1 Sep was 1,234.56" and it reconciles against your transactions.
 - **Own your data** — local SQLite, encrypted backup, append-only audit log of every change, one-command total wipe.

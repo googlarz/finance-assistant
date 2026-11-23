@@ -238,12 +238,38 @@ def load_json(path: Path, default: Any = None) -> Any:
         return json.load(handle)
 
 
+def _dir_has_encrypted_file(directory: Path, recursive: bool = False) -> bool:
+    try:
+        files = directory.rglob("*.json") if recursive else directory.glob("*.json")
+        return any(_is_encrypted_file(p) for p in files)
+    except OSError:
+        return False
+
+
+def is_data_encrypted(near: Path | None = None) -> bool:
+    """True when the finance data dir holds any encrypted file (so a half-encrypted
+    dir is locked too). Stops at the first hit; no caching, so it always reflects
+    the disk. Also checks the JSON siblings of `near` (a file outside the dir)."""
+    base = get_finance_dir()
+    if near is not None and near.parent != base and _dir_has_encrypted_file(near.parent):
+        return True
+    if not base.exists():
+        return False
+    return _is_encrypted_file(base / "finance.db") or _dir_has_encrypted_file(base, recursive=True)
+
+
+def assert_writable(near: Path | None = None) -> None:
+    """Raise DataEncryptedError while the finance data dir is encrypted."""
+    if is_data_encrypted(near):
+        raise DataEncryptedError(
+            "Your finance data is encrypted, so nothing can be written. "
+            "Ask me to decrypt it first ('decrypt my data')."
+        )
+
+
 def save_json(path: Path, data: Any) -> Path:
     path = Path(path)
-    if path.exists() and _is_encrypted_file(path):
-        raise DataEncryptedError(
-            "Refusing to overwrite encrypted %s. Decrypt your data first." % path.name
-        )
+    assert_writable(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     try:

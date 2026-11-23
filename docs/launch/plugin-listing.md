@@ -10,7 +10,7 @@ Local-first personal finance for Claude Code: deterministic tax engines for 7 co
 Finance Assistant lets Claude Code answer money questions using your real numbers. The language model handles the conversation; deterministic Python engines compute the tax, budget and projection figures.
 
 - Tax engines for Germany, UK, US, France, Netherlands, Poland and Ireland, validated against 39 official tax-authority test cases.
-- Imports 14 bank CSV formats; other files (scans, screenshots, foreign banks) are read by Claude through the same dedupe-and-confirm pipeline.
+- Imports 36 bank CSV formats; other files (scans, screenshots, foreign banks) are read by Claude through the same dedupe-and-confirm pipeline.
 - Budgets, debt avalanche/snowball, net worth, FIRE with a 10,000-path Monte Carlo, saveable tax what-ifs.
 - Data stays in a local `.finance/` folder (SQLite/JSON), with optional Fernet encryption and an audit log.
 - MCP server (Python 3.10+) exposing read tools plus dry-run-first write tools.

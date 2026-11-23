@@ -10,7 +10,7 @@ Claude is good at explaining money and unreliable at arithmetic, so I split the 
 
 - Tax engines for DE / UK / US / FR / NL / PL / IE, checked against 39 official tax-authority test cases
 - Budgets, debt avalanche vs snowball, net worth, FIRE Monte Carlo (10,000 paths), "what if I go freelance" comparisons
-- 14 bank CSV formats; anything else (scanned PDF, screenshot, foreign bank) is read by Claude through the same dedupe-and-confirm pipeline
+- 36 bank CSV formats; anything else (scanned PDF, screenshot, foreign bank) is read by Claude through the same dedupe-and-confirm pipeline
 - Data stays in a local `.finance/` folder; optional encryption; an MCP server so Claude Desktop can read your numbers
 
 Try it without your own data:

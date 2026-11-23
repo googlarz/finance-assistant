@@ -16,7 +16,7 @@ I built a personal-finance skill for Claude Code where the LLM does the conversa
 
 What it does:
 - Tax engines for DE, UK, US, FR, NL, PL, IE, loaded from a locales git submodule. They are checked against 39 official tax-authority test cases (BMF, HMRC, DGFiP, Belastingdienst, KAS, IRS, Revenue). US cases are computed independently from IRS Rev. Proc. 2023-34 and Schedule SE.
-- Imports 14 bank CSV formats on a fast path. Anything else (foreign bank, scanned PDF, screenshot) is read by Claude, then goes through the same sanitize, dedupe, confirm pipeline.
+- Imports 36 bank CSV formats on a fast path. Anything else (foreign bank, scanned PDF, screenshot) is read by Claude, then goes through the same sanitize, dedupe, confirm pipeline.
 - Budgets, debt payoff comparison, net worth, FIRE with a 10,000-path Monte Carlo, saveable what-ifs (W-2 vs 1099, single vs MFJ).
 - Data is local SQLite/JSON in `.finance/`. Optional Fernet encryption (PBKDF2 480k iterations), append-only audit log, a read-mostly MCP server (write tools are dry-run-first).
 - `python3 skill.py --demo` seeds sample data so you can try it without your own numbers.

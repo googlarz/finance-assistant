@@ -7,7 +7,7 @@ Finance Assistant
 Local-first finance copilot. Built for Claude Code.
 
 ## Description (260 chars)
-A Claude Code skill (not a SaaS) that turns your bank CSVs into a private finance copilot. Budgets, taxes, FIRE simulations, subscription detection, debt strategies — all on your machine. 6 locales, 14 bank importers, encrypted backups, weekly digests. Requires Claude Code; limited claude.ai Projects template included.
+A Claude Code skill (not a SaaS) that turns your bank CSVs into a private finance copilot. Budgets, taxes, FIRE simulations, subscription detection, debt strategies — all on your machine. 6 locales, 36 bank importers, encrypted backups, weekly digests. Requires Claude Code; limited claude.ai Projects template included.
 
 ## First comment
 

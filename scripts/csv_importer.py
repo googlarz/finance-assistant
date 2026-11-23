@@ -771,6 +771,18 @@ def _parse_amount(value: str, decimal: str = ",") -> float:
         return 0.0
 
 
+def _strict_amount(value: str, decimal: str = ",") -> float:
+    """Like _parse_amount but raises ValueError on an unparseable cell, so the
+    row can be skipped and counted instead of becoming a 0.00 transaction."""
+    return parse_amount(_CURRENCY_SYMBOLS.sub("", (value or "").strip().strip('"')), decimal)
+
+
+class ParsedRows(list):
+    """parse_csv result: a plain list of rows plus `skipped_bad_amount`, the
+    number of rows dropped because their amount cell could not be parsed."""
+    skipped_bad_amount = 0
+
+
 def _sanitize_cell(value: str) -> str:
     """Strip CSV formula injection prefixes (=, +, -, @, tab, newline at start)."""
     if not value:
@@ -963,11 +975,12 @@ def _row_currency(row: dict, fmt: dict, default: str) -> str:
 
 
 def _split_amount(row: dict, fmt: dict, decimal: str) -> Optional[float]:
-    """Signed amount from separate debit/credit columns; None if both empty."""
+    """Signed amount from separate debit/credit columns; None if both empty.
+    Raises ValueError when a non-empty cell is unparseable."""
     credit_val = (row.get(fmt.get("amount_credit", "Credit")) or "").strip()
     debit_val = (row.get(fmt.get("amount_debit", "Debit")) or "").strip()
-    credit_amt = abs(_parse_amount(credit_val, decimal)) if credit_val else 0.0
-    debit_amt = abs(_parse_amount(debit_val, decimal)) if debit_val else 0.0
+    credit_amt = abs(_strict_amount(credit_val, decimal)) if credit_val else 0.0
+    debit_amt = abs(_strict_amount(debit_val, decimal)) if debit_val else 0.0
     # YNAB writes "$0.00" in both columns by default — check parsed values,
     # not string presence. Debit columns may hold positive or negative numbers.
     if credit_amt == 0 and debit_amt == 0:
@@ -983,7 +996,7 @@ def _parse_known_format(file_path: str, fmt: dict, currency: str, bank_format: s
     amount_sign = fmt.get("amount_sign", "as_is")
     currency = _file_currency(fmt, currency)
 
-    transactions = []
+    transactions = ParsedRows()
 
     # Positional format (e.g. Wells Fargo — no header row)
     if fmt.get("positional"):
@@ -1004,7 +1017,11 @@ def _parse_known_format(file_path: str, fmt: dict, currency: str, bank_format: s
                 datetime.strptime(date_val, dfmt)
             except ValueError:
                 continue  # skip non-data rows
-            amount = _parse_amount(amount_val, decimal)
+            try:
+                amount = _strict_amount(amount_val, decimal)
+            except ValueError:
+                transactions.skipped_bad_amount += 1
+                continue
             col_cur = fmt.get("col_currency")
             code = row[col_cur].strip().upper() if col_cur is not None and col_cur < len(row) else ""
             transactions.append({
@@ -1031,14 +1048,22 @@ def _parse_known_format(file_path: str, fmt: dict, currency: str, bank_format: s
 
         # Resolve amount based on amount_sign mode
         if amount_sign == "split_cols":
-            amount = _split_amount(row, fmt, decimal)
+            try:
+                amount = _split_amount(row, fmt, decimal)
+            except ValueError:
+                transactions.skipped_bad_amount += 1
+                continue
             if amount is None:
                 continue
         else:
             amount_val = row.get(fmt.get("amount", ""), "")
             if not amount_val:
                 continue
-            amount = _parse_amount(amount_val, decimal)
+            try:
+                amount = _strict_amount(amount_val, decimal)
+            except ValueError:
+                transactions.skipped_bad_amount += 1
+                continue
             if amount_sign == "mint":
                 type_val = row.get(fmt.get("type_col", "Transaction Type"), "").strip().lower()
                 if type_val == "debit":
@@ -1099,7 +1124,7 @@ def _find_exact_col(headers: list[str], names: set) -> Optional[int]:
 
 def _parse_generic(file_path: str, currency: str, date_format: Optional[str] = None) -> list[dict]:
     """Fallback: parse a generic CSV by guessing columns."""
-    transactions = []
+    transactions = ParsedRows()
 
     text = read_text(file_path)
     # Try both comma and semicolon (tab for Excel/UTF-16 text exports)
@@ -1160,14 +1185,20 @@ def _parse_generic(file_path: str, currency: str, date_format: Optional[str] = N
             amount_val = cell(row, amount_col)
             if not amount_val:
                 continue
-            amount = _parse_amount(amount_val, _dec(amount_val))
+            try:
+                amount = _strict_amount(amount_val, _dec(amount_val))
+            except ValueError:
+                transactions.skipped_bad_amount += 1
+                continue
         else:
             debit_val, credit_val = cell(row, debit_col), cell(row, credit_col)
             if not debit_val and not credit_val:
                 continue
-            amounts = []
-            for v in (credit_val, debit_val):
-                amounts.append(abs(_parse_amount(v, _dec(v))) if v else 0.0)
+            try:
+                amounts = [abs(_strict_amount(v, _dec(v))) if v else 0.0 for v in (credit_val, debit_val)]
+            except ValueError:
+                transactions.skipped_bad_amount += 1
+                continue
             amount = amounts[0] - amounts[1]
 
         code = cell(row, currency_col).upper()

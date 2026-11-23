@@ -16,13 +16,13 @@ from typing import Optional
 
 try:
     from finance_storage import (
-        get_transactions_path, load_json, save_json,
+        get_transactions_path, load_json, save_json, assert_writable,
     )
     from currency import format_money
 except ImportError:
     import os, sys as _sys
     _sys.path.insert(0, os.path.dirname(__file__))
-    from finance_storage import get_transactions_path, load_json, save_json
+    from finance_storage import get_transactions_path, load_json, save_json, assert_writable
     from currency import format_money
 
 
@@ -229,6 +229,7 @@ def add_transaction(
     **kwargs,
 ) -> dict:
     """Add a transaction. Returns the new transaction plus updated totals."""
+    assert_writable()  # before SQLite: no half-write into a plaintext db next to encrypted JSON
     # Validate date: a wrong date silently becoming "today" would corrupt the
     # ledger, so reject it and let callers skip-and-count the row.
     try:
@@ -491,6 +492,7 @@ def update_transaction_fields(account_id: str, year: int, txn_id: str, updates: 
 
     Returns True if a matching transaction was found and updated.
     """
+    assert_writable()
     updates = {k: v for k, v in updates.items() if k in _UPDATABLE_FIELDS}
     if not updates:
         return False
@@ -533,6 +535,7 @@ def delete_transaction(account_id: str, txn_id: str) -> bool:
     The JSON side doesn't know which year the transaction is in, so it
     searches every {account_id}_*.json file and stops at the first match.
     """
+    assert_writable()
     deleted = False
 
     if _db_available():
@@ -578,6 +581,7 @@ def unlink_transfer_pair(account_id: str, txn_id: str, year: int) -> bool:
     at (account_id, year, txn_id) AND whatever it was linked to. Does not
     change the transaction's type; use update_transaction_fields for that.
     """
+    assert_writable()
     txns = get_transactions(account_id=account_id, year=year)
     txn = next((t for t in txns if t.get("id") == txn_id), None)
     if not txn:
@@ -608,6 +612,7 @@ def delete_import(import_ref: str) -> dict:
     and llm_import.py generate one shared import_ref per non-dry-run
     import() call and return it in the result dict as result['import_ref'].
     """
+    assert_writable()
     from account_manager import list_accounts
 
     deleted_count = 0

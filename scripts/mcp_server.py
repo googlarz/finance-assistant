@@ -72,6 +72,16 @@ def _setup_db() -> None:
         pass  # degrade to JSON-only reads rather than fail the whole call
 
 
+_ENCRYPTED_MSG = ("Your finance data is encrypted, so nothing was written. "
+                  "Ask the user to decrypt it first ('decrypt my data'), then retry.")
+
+
+def _encrypted_block() -> Optional[dict]:
+    """Error dict while the data dir is encrypted; None when writes are safe."""
+    from finance_storage import is_data_encrypted
+    return {"error": _ENCRYPTED_MSG} if is_data_encrypted() else None
+
+
 def _strip_raw_text(obj):
     """Never return raw file contents over MCP (llm_import echoes them)."""
     if isinstance(obj, dict):
@@ -155,6 +165,8 @@ def commit_import(file_path: str, expected_to_import: int, account_id: str = "de
     """Commit an import. Run import_preview first and pass its `to_import`
     count as expected_to_import; a mismatch (file changed, different
     account) refuses to write and returns the fresh preview instead."""
+    if (blocked := _encrypted_block()):
+        return blocked
     _setup_db()
     real = _allowed_import_path(file_path)
     if real is None:
@@ -172,6 +184,8 @@ def commit_import(file_path: str, expected_to_import: int, account_id: str = "de
 def add_account(name: str, type: str = "checking", currency: str = "EUR",
                 current_balance: float = 0.0) -> dict:
     """Create an account (checking, savings, investment, credit_card, loan, mortgage)."""
+    if (blocked := _encrypted_block()):
+        return blocked
     _setup_db()
     from account_manager import add_account as _add
     return _add({"name": name, "type": type, "currency": currency,
@@ -183,6 +197,8 @@ def add_transaction(date: str, amount: float, description: str, account_id: str 
                     category: Optional[str] = None, currency: str = "EUR") -> dict:
     """Add one transaction (negative amount = spending). Category is guessed
     from the description (and past corrections) when omitted."""
+    if (blocked := _encrypted_block()):
+        return blocked
     _setup_db()
     from transaction_logger import add_transaction as _add
     ttype = "income" if amount > 0 else "expense"
@@ -192,6 +208,8 @@ def add_transaction(date: str, amount: float, description: str, account_id: str 
 @mcp.tool()
 def assert_balance(account_id: str, balance: float, on: Optional[str] = None) -> dict:
     """Record a stated account balance (from a statement) for reconciliation."""
+    if (blocked := _encrypted_block()):
+        return blocked
     _setup_db()
     from reconciliation import assert_balance as _assert
     return _assert(account_id, balance, on)
@@ -220,6 +238,8 @@ def onboard_step(step: str, answer: str) -> dict:
     """Parse the user's free-text answer for a setup step (basics, employment,
     housing, goals, debts, investments, accounts, tax, budget), save it, and
     return the parsed data plus what onboarding still needs."""
+    if (blocked := _encrypted_block()):
+        return blocked
     _setup_db()
     from onboarding import complete_step, parse_step_response
     parsed = parse_step_response(step, answer)

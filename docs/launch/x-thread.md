@@ -8,7 +8,7 @@
 python3 skill.py --demo
 Real output from the seeded demo: net worth 63,880 EUR (assets 65,980, liabilities 2,100). DE tax summary on 58,000 gross: income tax 12,991.67, effective rate 22.4%.
 
-4/ Also: 14 bank CSV formats, LLM fallback for scans and screenshots, budgets, debt payoff, FIRE Monte Carlo (10,000 paths), saveable what-ifs like W-2 vs 1099.
+4/ Also: 36 bank CSV formats, LLM fallback for scans and screenshots, budgets, debt payoff, FIRE Monte Carlo (10,000 paths), saveable what-ifs like W-2 vs 1099.
 
 5/ Privacy: data stays in a local .finance/ folder, optional encryption, audit log. But by default Claude Code sends the conversation to Anthropic. Local-model route is documented if you need zero egress.
 

@@ -114,6 +114,32 @@ def _resolve_source_accounts(normalized: list[dict], default_account_id: str) ->
     return sorted(unmapped)
 
 
+def _looks_like_old_version_overlap(rows: list[dict], existing: list[dict]) -> bool:
+    """Heuristic for rows stored by v4.2.3: empty descriptions, or the same
+    date + |amount| stored with the opposite sign (debits saved as income)."""
+    dates = [str(r.get("date", ""))[:10] for r in rows]
+    if not dates:
+        return False
+    lo, hi = min(dates), max(dates)
+    stored = [e for e in existing if lo <= str(e.get("date", ""))[:10] <= hi]
+    if any(not str(e.get("description") or "").strip() for e in stored):
+        return True
+    stored_amounts = set()
+    for e in stored:
+        try:
+            stored_amounts.add((str(e.get("date", ""))[:10], round(float(e.get("amount", 0)), 2)))
+        except (TypeError, ValueError):
+            continue
+    for r in rows:
+        try:
+            amt = round(float(r.get("amount", 0)), 2)
+        except (TypeError, ValueError):
+            continue
+        if amt and (str(r.get("date", ""))[:10], -amt) in stored_amounts:
+            return True
+    return False
+
+
 def import_file(
     file_path: str,
     account_id: str,
@@ -165,6 +191,7 @@ def import_file(
 
     multi_account_warning = None
     rows_skipped = None
+    skipped_bad_amount = 0
     if fmt == "csv":
         from csv_importer import parse_csv, detect_source_accounts, detect_bank_format, count_data_rows
         bank_format = detect_bank_format(file_path)
@@ -172,6 +199,7 @@ def import_file(
         raw = parse_csv(file_path, bank_format=bank_format, currency=currency)
         data_rows = count_data_rows(file_path, bank_format)
         rows_skipped = max(0, data_rows - len(raw))
+        skipped_bad_amount = getattr(raw, "skipped_bad_amount", 0)
         source_accounts = detect_source_accounts(file_path, bank_format)
         if len(source_accounts) > 1:
             if route_by_account:
@@ -295,6 +323,7 @@ def import_file(
 
     unique: list[dict] = []
     near_removed = 0
+    overlap_accounts: list[str] = []
     for target_account, rows in by_account.items():
         years_in_file = set()
         for txn in rows:
@@ -310,6 +339,8 @@ def import_file(
         existing: list = []
         for yr in years_in_file:
             existing.extend(get_transactions(account_id=target_account, year=yr))
+        if _looks_like_old_version_overlap(rows, existing):
+            overlap_accounts.append(target_account)
         fresh = deduplicate(rows, existing, account_id=target_account)
         # Same date + amount as a stored row whose description was only reworded
         # (bank re-export, cleaned-up memo) is the same transaction.
@@ -334,9 +365,19 @@ def import_file(
         "dry_run": dry_run,
         "original_saved": original_saved,
     }
+    if overlap_accounts:
+        result["warnings"] = [
+            "Possible overlap with data imported by an older version of this tool "
+            f"(account(s): {', '.join(overlap_accounts)}). Some stored rows in this date "
+            "range have an empty description or the opposite sign of rows in this file, "
+            "so they may be counted twice. Review those transactions and consider deleting "
+            "the old import before re-importing."
+        ]
     currencies = sorted({t.get("currency") for t in unique if t.get("currency")})
     if len(currencies) > 1:
         result["currencies"] = currencies  # per-row currencies (Revolut/Wise multi-currency)
+    if skipped_bad_amount:
+        result["skipped_bad_amount"] = skipped_bad_amount
     if rows_skipped:
         result["rows_skipped"] = rows_skipped
         result["skip_note"] = (
