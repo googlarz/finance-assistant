@@ -1,6 +1,6 @@
 # Finance Assistant
 
-[![version](https://img.shields.io/badge/version-4.2.4-blue)](https://github.com/googlarz/finance-assistant/releases)
+[![version](https://img.shields.io/badge/version-4.3.0-blue)](https://github.com/googlarz/finance-assistant/releases)
 [![tests](https://img.shields.io/badge/tests-1%2C737%20passing-brightgreen)](docs/ARCHITECTURE.md#testing)
 [![tax cases](https://img.shields.io/badge/tax%20law-39%20official%20cases-success)](#locales--validation)
 [![locales](https://img.shields.io/badge/locales-DE·UK·US·FR·NL·PL·IE-orange)](#locales--validation)
@@ -11,7 +11,7 @@
 
 A personal finance copilot that applies actual tax statute to your real numbers — not estimates, not vibes. Runs locally through [Claude Code](https://claude.com/product/claude-code); your data never leaves your machine. Open source, free forever.
 
-`7 locales` · `36 bank formats + any file via LLM` · `Monte Carlo FIRE` · `1,745 tests`
+`7 locales` · `36 bank formats + any file via LLM` · `Monte Carlo FIRE` · `1,826 tests`
 
 **[→ Live demo](https://googlarz.github.io/finance-assistant/)** — see a real conversation without installing
 

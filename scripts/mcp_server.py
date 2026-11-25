@@ -181,6 +181,44 @@ def commit_import(file_path: str, expected_to_import: int, account_id: str = "de
 
 
 @mcp.tool()
+def set_category_rule(pattern: str, category: str, kind: str = "payee") -> dict:
+    """Add a merchant rule: transactions whose payee (kind=payee) or description (kind=keyword) contains this word get this category."""
+    if (blocked := _encrypted_block()):
+        return blocked
+    from category_learner import add_rule
+    return add_rule(pattern, category, kind)
+
+
+@mcp.tool()
+def remove_category_rule(pattern: str) -> dict:
+    """Remove a merchant rule."""
+    if (blocked := _encrypted_block()):
+        return blocked
+    from category_learner import remove_rule
+    return {"removed": remove_rule(pattern)}
+
+
+@mcp.tool()
+def apply_category_rules(dry_run: bool = True) -> dict:
+    """Apply merchant rules to uncategorized (other_*) transactions. Preview by default."""
+    if (blocked := _encrypted_block()):
+        return blocked
+    _setup_db()
+    from category_learner import apply_rules
+    return apply_rules(dry_run=dry_run)
+
+
+@mcp.tool()
+def set_transaction_category(transaction_id: str, category: str) -> dict:
+    """Change a transaction's category; its payee (if any) is remembered as a rule for future imports."""
+    if (blocked := _encrypted_block()):
+        return blocked
+    _setup_db()
+    from category_learner import recategorize_transaction
+    return recategorize_transaction(transaction_id, category)
+
+
+@mcp.tool()
 def add_account(name: str, type: str = "checking", currency: str = "EUR",
                 current_balance: float = 0.0) -> dict:
     """Create an account (checking, savings, investment, credit_card, loan, mortgage)."""

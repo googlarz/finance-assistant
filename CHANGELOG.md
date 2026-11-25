@@ -1,5 +1,23 @@
 # Changelog
 
+## v4.3.0 — 2026-11-25
+
+### Added
+- **Merchant rules.** New MCP tools `set_category_rule`, `remove_category_rule`, `apply_category_rules` (preview by default) and `set_transaction_category`, which also remembers the payee so future imports are categorized the same way.
+- **Tax year 2027** for DE, UK and US, using only values that are enacted or officially published (US: IRS Rev. Proc. 2026-35, Notice 2026-66; UK: Finance Act 2026; DE: Sozialversicherungs-Rechengrößen 2027). Draft and announced-only values are recorded in each locale's `provenance.json` and are not used in calculations.
+
+### Important: Germany 2027 income tax is provisional
+The Einkommensteuerreformgesetz 2027 (BT-Drs. 21/8235) is not yet law. German income tax for 2027 uses the 2026 tariff and is reported with low confidence and a warning. It will be updated once the law passes. Also provisional: UK 2027-28 values that are only announced (other NI thresholds, SSP, student-loan thresholds) and Scottish bands, which carry forward the 2026-27 projection.
+
+### Fixed
+- Category learner: a correction no longer turns every word of a description into a rule; payee matching is whole-word, and short payee names no longer match everything.
+- DE 2026: Pendlerpauschale 0.38 from km 1, average Zusatzbeitrag 2.9%, JAEG 77,400, Rürup 30,826, Pflege childless contribution (4.2% total), bAV tax-free limit 8% of BBG.
+- UK: employer NI is 15% above £5,000 (2025 and 2026); SSP £118.75 / £123.25; LEL 2026/27 £129; confidence is data-driven instead of hard-coded to 2026.
+- US: estimated-tax deadlines skip federal holidays (Q4 2027 is 2028-01-18); `get_tax_year_rules` flags a fallback to an older year instead of doing it silently; SEP-IRA text follows the tax year.
+
+### Changed
+- DE `social_contributions` returns separate `gkv` and `pv` caps instead of `gkv_pv` (the Pflege cap differs from the health-insurance cap from 2027).
+
 ## v4.2.4 — 2026-11-23
 
 ### Fixed (regressions from 4.1.0)

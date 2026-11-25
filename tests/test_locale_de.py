@@ -22,7 +22,7 @@ def test_locale_metadata():
 def test_2026_ruerup_fixed():
     """The 2026 ruerup_max_single was None in TaxDE — verify it's fixed."""
     rules = TAX_YEAR_RULES[2026]
-    assert rules["ruerup_max_single"] == 30784
+    assert rules["ruerup_max_single"] == 30826  # 124,800 x 24.7% rounded up (was an estimate of 30,784)
     assert rules["ruerup_max_single"] is not None
 
 

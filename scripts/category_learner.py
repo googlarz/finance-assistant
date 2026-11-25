@@ -7,6 +7,7 @@ over time. Uses a simple JSON-based keyword store — no ML needed.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -47,22 +48,12 @@ def learn_correction(
     """
     rules = _load_rules()
 
-    # Extract meaningful keywords from description (2+ chars, lowercase)
-    words = [w.lower() for w in (description or "").split() if len(w) >= 3]
-
-    # Store payee rule (highest priority)
+    # Only the payee is learned automatically: learning every word of a
+    # description made generic words ("payment", "card") steal categories.
+    learned_payee = None
     if payee and len(payee.strip()) >= 2:
-        payee_key = payee.strip().lower()
-        rules["payee_rules"][payee_key] = new_category
-
-    # Store keyword overrides (for the most distinctive words)
-    # Only store if the word isn't too generic
-    generic_words = {"the", "and", "for", "von", "der", "die", "das", "und", "mit",
-                     "eur", "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug",
-                     "sep", "oct", "nov", "dec", "berlin", "münchen", "hamburg"}
-    for word in words:
-        if word not in generic_words and len(word) >= 4:
-            rules["keyword_overrides"][word] = new_category
+        learned_payee = payee.strip().lower()
+        rules["payee_rules"][learned_payee] = new_category
 
     # Record the correction for history
     rules["corrections"].append({
@@ -80,10 +71,71 @@ def learn_correction(
 
     return {
         "learned": True,
-        "payee_rule": payee.strip().lower() if payee else None,
-        "keyword_rules": [w for w in words if w not in generic_words and len(w) >= 4],
+        "payee_rule": learned_payee,
         "new_category": new_category,
     }
+
+
+def _has_word(text: str, needle: str) -> bool:
+    return re.search(r"(?<!\w)" + re.escape(needle) + r"(?!\w)", text) is not None
+
+
+def add_rule(pattern: str, category: str, kind: str = "payee") -> dict:
+    """Add an explicit rule. kind: "payee" (matches payee) or "keyword" (matches description)."""
+    key = (pattern or "").strip().lower()
+    if len(key) < 3 or kind not in ("payee", "keyword") or not category:
+        return {"error": "need pattern (3+ chars), category, kind payee|keyword"}
+    rules = _load_rules()
+    rules["payee_rules" if kind == "payee" else "keyword_overrides"][key] = category
+    _save_rules(rules)
+    return {"added": key, "kind": kind, "category": category}
+
+
+def remove_rule(pattern: str) -> bool:
+    key = (pattern or "").strip().lower()
+    rules = _load_rules()
+    found = False
+    for bucket in ("payee_rules", "keyword_overrides"):
+        if key in rules.get(bucket, {}):
+            del rules[bucket][key]
+            found = True
+    if found:
+        _save_rules(rules)
+    return found
+
+
+def apply_rules(dry_run: bool = True) -> dict:
+    """Re-categorize transactions still in other_expense/other_income using the rules."""
+    from transaction_logger import get_transactions, update_transaction_fields
+    changes = []
+    for t in get_transactions(account_id="all"):
+        if t.get("category") not in ("other_expense", "other_income"):
+            continue
+        new = suggest_category(t.get("description") or "", t.get("payee"))
+        if new and new != t["category"]:
+            changes.append((t, new))
+    if not dry_run:
+        for t, new in changes:
+            year = int(str(t["date"])[:4])
+            update_transaction_fields(t["account_id"], year, t["id"], {"category": new})
+    sample = [{"id": t["id"], "description": t.get("description"), "to": n} for t, n in changes[:20]]
+    key = "would_change" if dry_run else "changed"
+    return {key: len(changes), "sample": sample}
+
+
+def recategorize_transaction(txn_id: str, new_category: str) -> dict:
+    """Change one transaction's category and learn its payee as a rule."""
+    from transaction_logger import get_transactions, update_transaction_fields
+    for t in get_transactions(account_id="all"):
+        if t.get("id") == txn_id:
+            year = int(str(t["date"])[:4])
+            ok = update_transaction_fields(t["account_id"], year, txn_id, {"category": new_category})
+            learned = None
+            if ok:
+                learned = learn_correction(t.get("description"), t.get("payee"),
+                                           t.get("category"), new_category)["payee_rule"]
+            return {"updated": bool(ok), "learned_payee": learned, "category": new_category}
+    return {"updated": False, "error": "transaction not found"}
 
 
 def suggest_category(description: str, payee: Optional[str] = None) -> Optional[str]:
@@ -93,21 +145,25 @@ def suggest_category(description: str, payee: Optional[str] = None) -> Optional[
     """
     rules = _load_rules()
 
-    # 1. Check payee rules (highest priority)
+    # 1. Payee rules (highest priority): exact, else whole-word containment
+    # for stored names of 4+ chars (short names would match everything).
     if payee:
         payee_key = payee.strip().lower()
-        if payee_key in rules.get("payee_rules", {}):
-            return rules["payee_rules"][payee_key]
-        # Partial match
-        for stored_payee, category in rules.get("payee_rules", {}).items():
-            if stored_payee in payee_key or payee_key in stored_payee:
+        payee_rules = rules.get("payee_rules", {})
+        if payee_key in payee_rules:
+            return payee_rules[payee_key]
+        for stored, category in payee_rules.items():
+            if len(stored) >= 4 and _has_word(payee_key, stored):
                 return category
 
-    # 2. Check keyword overrides
+    # 2. Payee rules also match inside the description (payee is often absent),
+    # then keyword overrides; whole-word only.
     desc_lower = (description or "").lower()
-    keyword_overrides = rules.get("keyword_overrides", {})
-    for keyword, category in keyword_overrides.items():
-        if keyword in desc_lower:
+    for stored, category in rules.get("payee_rules", {}).items():
+        if len(stored) >= 4 and _has_word(desc_lower, stored):
+            return category
+    for keyword, category in rules.get("keyword_overrides", {}).items():
+        if _has_word(desc_lower, keyword):
             return category
 
     return None
