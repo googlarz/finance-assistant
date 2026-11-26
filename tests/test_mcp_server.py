@@ -28,6 +28,8 @@ def test_registers_expected_tools():
         "get_net_worth", "get_tax_summary", "commit_import", "add_account",
         "add_transaction", "assert_balance", "check_reconciliation",
         "get_capital_gains", "onboard_step",
+        "apply_category_rules", "remove_category_rule", "set_category_rule",
+        "set_transaction_category",
     }
 
 
